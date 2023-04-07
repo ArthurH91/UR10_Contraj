@@ -33,7 +33,7 @@ from create_visualizer import create_visualizer
 
 
 class QuadratricProblemNLP():
-    def __init__(self, rmodel: pin.Model, rdata: pin.Data, gmodel: pin.GeometryModel, gdata: pin.GeometryData, vis, T : float, k1 = 1, k2 = 1):
+    def __init__(self, rmodel: pin.Model, rdata: pin.Data, gmodel: pin.GeometryModel, gdata: pin.GeometryData, T : float, k1 = 1, k2 = 1):
         """Initialize the class with the models and datas of the robot.
 
         Parameters
@@ -46,8 +46,6 @@ class QuadratricProblemNLP():
             Geometrical model of the robot
         gdata : pin.GeometryData
             Geometrical data of the model of the robot
-        vis : meschat.Visualizer
-            Visualizer used for displaying the robot.
         T : float
             Number of steps for 
         k1 : float
@@ -59,7 +57,6 @@ class QuadratricProblemNLP():
         self._rdata = rdata
         self._gmodel = gmodel
         self._gdata = gdata
-        self._vis = vis
         self._T = T
         self._k1 = k1
         self._k2 = k2
@@ -187,7 +184,9 @@ class QuadratricProblemNLP():
         return self._get_q_iter_from_Q(iter + 1) - self._get_q_iter_from_Q(iter)
     
 
+
 if __name__ == "__main__":
+
 
     robot_wrapper = RobotWrapper()
     robot, rmodel, gmodel = robot_wrapper(target=True)
