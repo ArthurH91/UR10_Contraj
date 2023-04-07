@@ -187,13 +187,14 @@ class QuadratricProblemNLP():
 
 if __name__ == "__main__":
 
-
+    # Setting up the environnement 
     robot_wrapper = RobotWrapper()
     robot, rmodel, gmodel = robot_wrapper(target=True)
     rdata = rmodel.createData()
     gdata = gmodel.createData()
     vis = create_visualizer(robot)
 
+    
     q = pin.randomConfiguration(rmodel)
     q1 = pin.randomConfiguration(rmodel)
     q2 = pin.randomConfiguration(rmodel)
