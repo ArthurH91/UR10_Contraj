@@ -2,12 +2,45 @@ import unittest
 
 import numpy as np
 import pinocchio as pin
+import copy
 
 from QuadraticProblemNLP import QuadratricProblemNLP
 from RobotWrapper import RobotWrapper
 
 
 class TestQuadraticProblemNLP(unittest.TestCase):
+
+    # Methods used for the tests
+    def _numdiff(self, f, x, eps=1e-6):
+        """Estimate df/dx at x with finite diff of step eps
+
+        Parameters
+        ----------
+        f : function handle
+            Function evaluated for the finite differente of its gradient.
+        x : np.ndarray
+            Array at which the finite difference is calculated
+        eps : float, optional
+            Finite difference step, by default 1e-6
+
+        Returns
+        -------
+        jacobian : np.ndarray
+            Finite difference of the function f at x.
+        """
+        print(x)
+        xc = np.copy(x)
+        f0 = np.copy(f(x))
+        res = []
+        for i in range(len(x)):
+            xc[i] += eps
+            res.append(copy.copy(f(xc)-f0)/eps)
+            xc[i] = x[i]
+        print(f"res = {res}")
+        return np.array(res).T
+
+
+    # Tests 
 
     def test_get_q_iter_from_Q(self):
         """Testing the function _get_iter_from_Q by comparing the first array of Q and the q_init, which should be the first array of Q 
@@ -46,7 +79,32 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         """
         self.assertEqual(principal_cost_handmade, cost, msg = "Error while computing the total cost")
 
+    def test_compute_derivative_principal_residuals_filled_part(self):
+        """Testing the function _compute_derivative_principal_residuals, as the matrix is composed of 2 identity matrixes where one is one line under the diagonal, the determinant should be equal to 1.
+        Testing only the identity block matrix, not the whole one because computing the determinant is only feasible for a squared matrix
+        """
+        self.assertEqual(np.linalg.det(
+            derivative_principal_residuals[:rmodel.nq, :rmodel.nq]), QP._k1, msg="The determinant of the principal residual is not equal to 1")
 
+    def test_compute_derivative_principal_residuals_terminal_residual_part(self):
+        """Testing the function _compute_derivative_principal_residuals, verifying that the part of the matrix reserved for the terminal residual derivates is null
+        """
+        self.assertTrue(np.array_equal(
+            np.zeros((3, 6)), derivative_principal_residuals[-3:, -6:]), msg= "The terminal residual part of the derivatives of the principal residual should be null but is not")
+
+    def test_compute_derivative_terminal_residuals(self):
+        """I did not found a method to test this part of the residual yet
+        """
+        pass
+
+    def test_grad(self):
+        """Testing the grad function with the finite difference method define before
+        """
+        grad_numdiff = self._numdiff(QP.grad, QP._Q)
+        self.assertTrue(np.isclose(grad_numdiff, gradient), msg= "The gradient is not the same as the finite difference one")
+
+
+    
 if __name__ == "__main__":
 
     # Setup of the environement
@@ -72,6 +130,11 @@ if __name__ == "__main__":
     principal_cost = QP._principal_cost
     principal_cost_handmade = 0.5 * np.linalg.norm(q_target - q_init) ** 2
 
+    # Variables for computing the derivatives of the residuals
+    derivative_principal_residuals = QP._compute_derivative_principal_residuals()
+
+    # Variables for computing the gradient 
+    gradient = QP.grad(Q_target)
 
     # Start of the unit tests
     unittest.main()
