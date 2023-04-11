@@ -47,7 +47,7 @@ class QuadratricProblemNLP():
         gdata : pin.GeometryData
             Geometrical data of the model of the robot
         T : float
-            Number of steps for 
+            Number of steps for the trajectory
         k1 : float
             Factor of penalisation of the principal cost
         k2 : float
@@ -104,11 +104,11 @@ class QuadratricProblemNLP():
         Parameters
         ----------
         Q : np.ndarray
-            Array of shape (T*robot.nq) in which all the configurations of the robot are, in a single column.
+            Array of shape (T*rmodel.nq) in which all the configurations of the robot are, in a single column.
         
         Returns:
         -------
-        residuals (np.ndarray): Array of size (T*robot.nq + 3) defined by the difference between the t-th configuration and the t+1-th configuration and by the terminal residual, which is the distance betwee, the end effector at the end of the optimization iteration and the target. 
+        residuals (np.ndarray): Array of size (T*rmodel.nq + 3) defined by the difference between the t-th configuration and the t+1-th configuration and by the terminal residual, which is the distance betwee, the end effector at the end of the optimization iteration and the target. 
         """
         self._Q = Q
 
@@ -117,7 +117,7 @@ class QuadratricProblemNLP():
         # Initializing the _residual array.
         self._residual = self._get_difference_between_q_iter(0)
 
-        for iter in range(1,self._T - 1):
+        for iter in range(1,self._T-1):
             self._residual = np.concatenate( (self._residual, self._get_difference_between_q_iter(iter)), axis=None)
 
         # Penalizing the principal residual 
@@ -139,19 +139,21 @@ class QuadratricProblemNLP():
 
         return self._residual
     
-    def compute_cost(self):
+    def compute_cost(self, Q: np.ndarray):
         """Computes the cost of the QP.
 
         Parameters
         ----------
         Q : np.ndarray
-            Array of shape (T*robot.nq) in which all the configurations of the robot are, in a single column.
+            Array of shape (T*rmodel.nq) in which all the configurations of the robot are, in a single column.
 
         Returns
         -------
         self._cost : float
             Sum of the costs 
         """
+
+        res = self.compute_residuals(Q)
 
         self._principal_cost = 0.5 * np.linalg.norm(self._principal_residual) ** 2 
         self._terminal_cost = 0.5 * np.linalg.norm(self._terminal_residual) ** 2
@@ -183,7 +185,86 @@ class QuadratricProblemNLP():
         """
         return self._get_q_iter_from_Q(iter + 1) - self._get_q_iter_from_Q(iter)
     
+    def _compute_derivative_principal_residuals(self):
+        """Computes the derivatives of the principal residuals that are in a matrix, as proved easily mathematically, this matrix is made out of :
+        - a matrix ((nq.T +3) x (nq.T)) where the diagonal is filled with 1  
+        - a matrix ((nq.T +3) x (nq.T)) where the diagonal under the diagonal 0 is filled with -1  
 
+        Returns
+        -------
+        _derivative_principal_residuals : np.ndarray
+            matrix describing the principal residuals derivatives
+        """
+        _derivative_principal_residuals = self._k1 * np.eye(self._rmodel.nq * (self._T -1) + 3, self._rmodel.nq * (self._T-1 )) - np.eye(
+            self._rmodel.nq * (self._T - 1) + 3, self._rmodel.nq * (self._T - 1), k=-1)
+        
+        # Replacing the last -1 by 0 because it goes an iteration too far.
+        _derivative_principal_residuals[-3:, -6:] = np.zeros((3,6))
+        return _derivative_principal_residuals
+
+    def _compute_derivative_terminal_residuals(self):
+        """Computes the derivatives of the terminal residuals, which are for now the jacobian matrix from pinocchio.
+
+        Returns
+        -------
+        self._derivative_terminal_residuals : np.ndarray
+            matrix describing the terminal residuals derivativess
+        """
+        # Getting the q_terminal from Q 
+        q_terminal = self._get_q_iter_from_Q(self._T-1)
+
+        # Computing the joint jacobian from pinocchio, used as the terminal residual derivative
+        _derivative_terminal_residuals = self._k2 **2 * pin.computeJointJacobian(self._rmodel, self._rdata, q_terminal, 6)[:3, :]
+        return _derivative_terminal_residuals
+
+    def _compute_derivative_residuals(self):
+        """Computes the derivatives of the residuals
+
+        Returns
+        -------
+        derivative_residuals : np.ndarray
+            matrix describing the derivative of the residuals
+        """
+
+        # Computing the principal residuals
+        self._derivative_residuals = self._compute_derivative_principal_residuals()
+
+        # Computing the terminal residuals 
+        _derivative_terminal_residuals = self._compute_derivative_terminal_residuals()
+
+        # Modifying the residuals to include the terminal residuals computed before
+        self._derivative_residuals[-3:, -6:] = _derivative_terminal_residuals
+
+
+    def grad(self, Q: np.ndarray):
+        """Returns the grad of the cost function.
+
+        Parameters
+        ----------
+        Q : np.ndarray
+            Array of shape (T*rmodel.nq) in which all the configurations of the robot are, in a single column.
+
+        Returns
+        -------
+        gradient : np.ndarray
+            Array of shape (T*rmodel.nq + 3) in which the values of the gradient of the cost function are computed.
+        """
+        self._Q = Q
+        _ = self.compute_residuals(Q)
+        self._compute_derivative_residuals()
+
+        self.gradval = self._derivative_residuals.T @ self._residual
+        return self.gradval
+
+    def hess(self, Q : np.ndarray):
+        """Returns the hessian of the cost function.
+        """
+        self._Q = Q
+        _ = self.compute_residuals(Q)
+        self._compute_derivative_residuals()
+        self.hessval = self._derivative_residuals.T @ self._derivative_residuals
+
+        return self.hessval
 
 if __name__ == "__main__":
 
@@ -194,7 +275,7 @@ if __name__ == "__main__":
     gdata = gmodel.createData()
     vis = create_visualizer(robot)
 
-    
+
     q = pin.randomConfiguration(rmodel)
     q1 = pin.randomConfiguration(rmodel)
     q2 = pin.randomConfiguration(rmodel)
@@ -205,11 +286,13 @@ if __name__ == "__main__":
     pin.updateGeometryPlacements(rmodel, rdata, gmodel, gdata, q)
     vis.display(q)
 
-    q1 = np.array([0, 0 ,0 ,0,0,0])
-    q2 = np.array([1, 1 ,1 ,1,1,1])
-    q3 = np.array([3, 3 ,3 ,3,3,3])
+    q0 = np.array([1, 1, 1, 1, 1, 1])
+    q1 = np.array([2, 2 ,2 ,2,2,2])
+    q2 = np.array([3, 3 ,3 ,3,3,3])
+    q3 = np.array([4,4,4,4,4,4])
 
-    Q = np.concatenate((q1, q2, q3))
+    Q = np.concatenate((q0, q1, q2, q3))
 
-    QP = QuadratricProblemNLP(rmodel, rdata, gmodel, gdata, vis, T=3, k1 = 10, k2=100 )
+    QP = QuadratricProblemNLP(rmodel, rdata, gmodel, gdata, T=4, k1 = 10, k2=100 )
     QP._Q = Q
+
