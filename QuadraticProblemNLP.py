@@ -98,19 +98,9 @@ class QuadratricProblemNLP():
     
 
     
-    def compute_residuals(self, Q: np.ndarray):
-        """Returns the residuals of the cost function.
-
-        Parameters
-        ----------
-        Q : np.ndarray
-            Array of shape (T*rmodel.nq) in which all the configurations of the robot are, in a single column.
-        
-        Returns:
-        -------
-        residuals (np.ndarray): Array of size (T*rmodel.nq + 3) defined by the difference between the t-th configuration and the t+1-th configuration and by the terminal residual, which is the distance betwee, the end effector at the end of the optimization iteration and the target. 
+    def compute_residuals(self):
+        """Compute the residuals of the cost function.
         """
-        self._Q = Q
 
         # Computing the principal residual 
         
@@ -153,7 +143,8 @@ class QuadratricProblemNLP():
             Sum of the costs 
         """
 
-        res = self.compute_residuals(Q)
+        self._Q = Q
+        res = self.compute_residuals()
 
         self._principal_cost = 0.5 * np.linalg.norm(self._principal_residual) ** 2 
         self._terminal_cost = 0.5 * np.linalg.norm(self._terminal_residual) ** 2
@@ -250,7 +241,7 @@ class QuadratricProblemNLP():
             Array of shape (T*rmodel.nq + 3) in which the values of the gradient of the cost function are computed.
         """
         self._Q = Q
-        _ = self.compute_residuals(Q)
+        _ = self.compute_residuals()
         self._compute_derivative_residuals()
 
         self.gradval = self._derivative_residuals.T @ self._residual
@@ -260,7 +251,7 @@ class QuadratricProblemNLP():
         """Returns the hessian of the cost function.
         """
         self._Q = Q
-        _ = self.compute_residuals(Q)
+        _ = self.compute_residuals()
         self._compute_derivative_residuals()
         self.hessval = self._derivative_residuals.T @ self._derivative_residuals
 

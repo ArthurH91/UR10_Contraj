@@ -146,7 +146,7 @@ class NewtonMethodMt(Solver):
 
         # Start
         while True:
-
+            
             # Cost of the step
             self._fval_k = self._f(self._xval_k)
             # Gradient of the cost function 
@@ -190,7 +190,7 @@ class NewtonMethodMt(Solver):
 
             # Computing next step
             self._xval_k = self._compute_next_step()
-
+            
             # Increasing step size (according to Marc Toussaint)
             self._alpha_k = min(self._alpha_increase* self._alpha_k, 1)
 
@@ -234,7 +234,7 @@ class NewtonMethodMt(Solver):
         # Repeat
         while True:
             # Caclulate current function value
-            fval_curr = self._f(self._xval_k + alpha * self._search_dir_k)
+            fval_curr = self._f(self._xval_k[6:] + alpha * self._search_dir_k)
             # Check stopping conditions
             if self._armijo_condition_is_true(alpha=alpha, fval_alpha=fval_curr):
                 break
@@ -258,7 +258,7 @@ class NewtonMethodMt(Solver):
         search_dir_k : np.ndarray
             search direction for trust region
         """
-        return self._lin_solver(self._hessval_k + self._regu_k * np.eye(len(self._xval_k)), - self._gradfval_k)
+        return self._lin_solver(self._hessval_k + self._regu_k * np.eye(len(self._gradfval_k)), - self._gradfval_k)
     
 
     def _print_start(self):

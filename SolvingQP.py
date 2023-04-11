@@ -50,7 +50,7 @@ if __name__ == "__main__":
     vis = create_visualizer(robot)
 
     # Creating the QP 
-    T = 3
+    T = 4
     QP = QuadratricProblemNLP(rmodel, rdata, gmodel, gdata, T, k1 = 1, k2=10 )
 
     # Initial configuration
@@ -60,7 +60,7 @@ if __name__ == "__main__":
 
     vis.display(q0)
     Q = np.array(q0)
-    for i in range(T):
+    for i in range(T-1):
         Q = np.concatenate((Q, q0))
 
     eps = 1e-5
