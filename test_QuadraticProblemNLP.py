@@ -28,7 +28,6 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         jacobian : np.ndarray
             Finite difference of the function f at x.
         """
-        print(x)
         xc = np.copy(x)
         f0 = np.copy(f(x))
         res = []
@@ -36,8 +35,21 @@ class TestQuadraticProblemNLP(unittest.TestCase):
             xc[i] += eps
             res.append(copy.copy(f(xc)-f0)/eps)
             xc[i] = x[i]
-        print(f"res = {res}")
         return np.array(res).T
+
+
+
+    def _fdm_residuals(self, res, Q, eps = 1e-6):
+        derivative_residuals = np.zeros((len(Q),len(Q) +3 ))
+        residual = res(Q)
+
+        #Going through the columns
+        for i in range(len(Q)):
+                # Creating the vector Q composed only of the j-th element
+                Qc = np.zeros(len(Q))
+                Qc[i] = Q[i] + eps
+                derivative_residuals[i] = (res(Qc) - residual)/eps
+        return derivative_residuals
 
 
     # Tests 
@@ -51,7 +63,7 @@ class TestQuadraticProblemNLP(unittest.TestCase):
     def test_get_difference_between_q_iter(self):
         """Testing the function _get_difference_between_q_iter by comparing its result and the difference between q_target and q_init that should be the first and second array of Q
         """
-        self.assertTrue(np.array_equal(QP._get_difference_between_q_iter(0), q_target - q_init), msg=" The difference between the q_iter and q_iter+1 is false")
+        self.assertTrue(np.array_equal(QP._get_difference_between_q_iter(0), q_inter - q_init), msg=" The difference between the q_iter and q_iter+1 is false")
 
     def test_distance_endeff_target(self):
         """Testing the function _distance_endeff_target by putting the robot at the configuration q_target whence the target was generated and testing whether the distance between the end-effector and the target is equal to 0
@@ -59,15 +71,25 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         self.assertAlmostEqual(np.linalg.norm(QP._distance_endeff_target(
             q_target)), 0, msg="Error while computing the distance between the end effector and the target")
         
+    def test_initial_residual(self):
+        """Testing whether the initial residual is 0 as it should be
+        """
+        self.assertTrue(np.array_equal(initial_residual_handmade, initial_residual))
+
     def test_compute_principal_residual(self):
         """Testing the difference between the residual that was computed in QP and the handmade residual
         """
-        self.assertTrue(np.array_equal(principal_residual, residual_handmade), msg = "Error while computing principal residual")
+        self.assertTrue(np.array_equal(principal_residual, principal_residual_handmade), msg = "Error while computing principal residual")
 
     def test_compute_terminal_residual(self):
         """Testing the difference between the terminal residual that was computed in QP and the handmade residual. As the robot is on the target, the terminal residual ought to be equal to 0
         """
         self.assertEqual(np.linalg.norm(QP._terminal_residual), 0, msg = "Error while computing terminal residual")
+
+    def test_compute_initial_cost(self):
+        """Testing the difference between initial cost handmade and computed, should be equal
+        """
+        self.assertEqual(initial_cost_handmade, initial_cost , msg = "Error while computing the initial cost, should be equal but is not")
 
     def test_compute_principal_cost(self):
         """Testing the difference between the cost that was computed in QP and the handmade cost
@@ -75,7 +97,7 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         self.assertEqual(principal_cost, principal_cost_handmade, msg = "Error while computing the principal cost")
 
     def test_compute_cost(self):
-        """As the robot is on the target, the terminal cost ought to be equal to 0, then the total cost is equal to the principal cost
+        """As the robot is on the target and has an initial position at the initial configuration, the terminal cost ought to be equal to 0, then the total cost is equal to the principal cost
         """
         self.assertEqual(principal_cost_handmade, cost, msg = "Error while computing the total cost")
 
@@ -84,7 +106,7 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         Testing only the identity block matrix, not the whole one because computing the determinant is only feasible for a squared matrix
         """
         self.assertEqual(np.linalg.det(
-            derivative_principal_residuals[:rmodel.nq, :rmodel.nq]), QP._k1, msg="The determinant of the principal residual is not equal to 1")
+            derivative_principal_residuals[:rmodel.nq, :rmodel.nq]), QP._k1, msg="The determinant of the principal residual derivatives matrix is not equal to 1")
 
     def test_compute_derivative_principal_residuals_terminal_residual_part(self):
         """Testing the function _compute_derivative_principal_residuals, verifying that the part of the matrix reserved for the terminal residual derivates is null
@@ -97,11 +119,13 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         """
         pass
 
-    # def test_grad(self):
-    #     """Testing the grad function with the finite difference method define before
-    #     """
-    #     grad_numdiff = self._numdiff(QP.grad, QP._Q)
-    #     self.assertTrue(np.isclose(grad_numdiff, gradient), msg= "The gradient is not the same as the finite difference one")
+    def test_grad(self):
+        """Testing the grad function with the finite difference method define before
+        """
+        fdm_res = self._fdm_residuals(QP.compute_residuals, QP._Q)
+        print(f"fdm res : {fdm_res}")
+        print(f"derivative res : {QP._derivative_residuals}")
+        self.assertAlmostEqual(np.linalg.norm(fdm_res - QP._derivative_residuals), msg= "The residual is not the same as the finite difference one")
 
 
     
@@ -112,25 +136,44 @@ if __name__ == "__main__":
     robot, rmodel, gmodel = robot_wrapper(target=True)
     rdata = rmodel.createData()
     gdata = gmodel.createData()
-    QP = QuadratricProblemNLP(rmodel, rdata, gmodel, gdata, T=2)
+    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T=2)
 
     # Variables for the tests of _get_q_iter_from_Q and _distance_endeff_target
     q_target = robot_wrapper._q_target  # Configuration array reaching the target
     q_init = pin.randomConfiguration(rmodel)
-    Q_target = np.concatenate((q_init, q_target))
+    q_inter = pin.randomConfiguration(rmodel)
+    Q_target = np.concatenate((q_init,q_inter, q_target))
     QP._Q = Q_target
 
-    # Variables for the test_compute_residuals
-    residual_handmade = q_target - q_init
+    # Applying the initial configuration to the robot
+    robot.q0 = q_init
+
+    # Variables for computing the residuals
     residual = QP.compute_residuals(Q_target)
+
+    # First, computing the initial residual (ie verifying that the robot has the right initial configuration)
+    initial_residual_handmade = QP._k1 * (QP._get_q_iter_from_Q(0) - q_init)
+    initial_residual = QP._initial_residual
+
+    # Computing the principal residual (ie the speed of the robot)
     principal_residual = QP._principal_residual
+    principal_residual_handmade = np.concatenate((q_inter - q_init, q_target - q_inter))
+
 
     # Variables for computing the cost 
-    cost = QP.compute_cost()
+    cost = QP.compute_cost(Q_target)
+
+    # First, computing the initial cost 
+    initial_cost = QP._initial_cost
+    initial_cost_handmade = 0.5 * np.linalg.norm(initial_residual_handmade) **2
+
+    # Computing the principal cost 
     principal_cost = QP._principal_cost
-    principal_cost_handmade = 0.5 * np.linalg.norm(q_target - q_init) ** 2
+    principal_cost_handmade = 0.5 * np.linalg.norm(principal_residual_handmade) ** 2
 
     # Variables for computing the derivatives of the residuals
+    QP._compute_derivative_residuals()
+
     derivative_principal_residuals = QP._compute_derivative_principal_residuals()
 
     # Variables for computing the gradient 

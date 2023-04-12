@@ -26,19 +26,51 @@
 import numpy as np
 import pinocchio as pin
 import time
+from scipy.optimize import fmin
+import matplotlib.pyplot as plt
 
 from RobotWrapper import RobotWrapper
 from create_visualizer import create_visualizer
 from QuadraticProblemNLP import QuadratricProblemNLP
 from NewtonMethodMarcToussaint import NewtonMethodMt
+from Solver import Solver
 
-def callback(q):
-    vis.display(q)
-    time.sleep(1e-3)
-    input()
+
+def get_q_iter_from_Q(Q : np.ndarray, iter: int, nq: int):
+    """Returns the iter-th configuration vector q_iter in the Q array.
+
+        Args:
+            Q (np.ndarray): Optimization vector.
+            iter (int): Index of the q_iter desired.
+            nq (int): size of q_iter
+
+        Returns:
+            q_iter (np.ndarray): Array of the configuration of the robot at the iter-th step.
+        """
+    q_iter = np.array((Q[nq * iter: nq * (iter+1)]))
+    return q_iter
+
+
+
+def display_last_traj(Q: np.ndarray, nq : int):
+    """Display the trajectory computed by the solver
+
+    Parameters
+    ----------
+    Q : np.ndarray
+        Optimization vector.
+    nq : int
+        size of q_iter
+    """
+    for iter in range(int(len(Q)/nq)):
+        q_iter = get_q_iter_from_Q(Q,iter,nq)
+        vis.display(q_iter)
+        input()
+
 
 if __name__ == "__main__":
 
+    pin.seed(0)
 
     # Creation of the robot
     robot_wrapper = RobotWrapper()
@@ -50,21 +82,64 @@ if __name__ == "__main__":
     vis = create_visualizer(robot)
 
     # Creating the QP 
-    T = 4
-    QP = QuadratricProblemNLP(rmodel, rdata, gmodel, gdata, T, k1 = 1, k2=10 )
+    T = 10
+    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T, k1 = 10, k2=100 )
 
     # Initial configuration
-    # pin.seed(0)
     q0 = pin.randomConfiguration(rmodel)
     robot.q0 = q0
-
     vis.display(q0)
+
+    # Initial trajectory 
     Q = np.array(q0)
-    for i in range(T-1):
+    for i in range(T):
         Q = np.concatenate((Q, q0))
+    print(len(Q))
 
-    eps = 1e-5
+    # Trust region solver
+    trust_region_solver = NewtonMethodMt(QP.compute_cost, QP.grad, QP.hess, max_iter = 20, callback=None)
+    res = trust_region_solver(Q)
+    list_fval_mt, list_gradfkval_mt, list_alphak_mt, list_reguk = trust_region_solver._fval_history, trust_region_solver._gradfval_history, trust_region_solver._alphak_history, trust_region_solver._reguk_history
 
-    Solv = NewtonMethodMt(QP.compute_cost, QP.grad, QP.hess, max_iter = 10, callback=callback)
+    # Scipy solver
+    mini = fmin(QP.compute_cost, Q)
 
-    res = Solv(Q)
+    # Gradient descent solver
+    newton_method = Solver(QP.compute_cost, QP.grad, QP.hess, max_iter=20, verbose = True, step_type="newton")
+    res_nm = newton_method(Q)
+    list_fval_nm, list_gradfkval_nm, list_alphak_nm = newton_method._fval_history, newton_method._gradfval_history, newton_method._alphak_history
+
+
+    # Plotting the results
+
+    plt.subplot(411)
+    plt.plot(list_fval_mt, "-ob", label="Marc Toussaint's method")
+    plt.plot(list_fval_nm, "-or", label="Newton method")
+    plt.yscale("log")
+    plt.ylabel("Cost")
+    plt.legend()
+
+    plt.subplot(412)
+    plt.plot(list_gradfkval_mt, "-ob", label="Marc Toussaint's method")
+    plt.plot(list_fval_nm, "-or", label="Newton method")
+    plt.yscale("log")
+    plt.ylabel("Gradient")
+    plt.legend()
+
+    plt.subplot(413)
+    plt.plot(list_alphak_mt,  "-ob", label="Marc Toussaint's method")
+    plt.plot(list_fval_nm, "-or", label="Newton method")
+    plt.yscale("log")
+    plt.ylabel("Alpha")
+    plt.legend()
+
+    plt.subplot(414)
+    plt.plot(list_reguk, "-ob", label="Marc Toussaint's method")
+    plt.yscale("log")
+    plt.ylabel("Regularization")
+    plt.xlabel("Iterations")
+    plt.legend()
+
+    plt.suptitle(
+        " Comparison Newton's method and Marc Toussaint's Newton method")
+    plt.show()
