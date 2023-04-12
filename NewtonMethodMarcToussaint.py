@@ -234,7 +234,7 @@ class NewtonMethodMt(Solver):
         # Repeat
         while True:
             # Caclulate current function value
-            fval_curr = self._f(self._xval_k[6:] + alpha * self._search_dir_k)
+            fval_curr = self._f(self._xval_k + alpha * self._search_dir_k)
             # Check stopping conditions
             if self._armijo_condition_is_true(alpha=alpha, fval_alpha=fval_curr):
                 break
