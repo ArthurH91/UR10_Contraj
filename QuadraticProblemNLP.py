@@ -192,7 +192,7 @@ class QuadratricProblemNLP():
             matrix describing the principal residuals derivatives
         """
         _derivative_principal_residuals = self._k1 * np.eye(self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T +1)) - np.eye(
-            self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-1)
+            self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq)
         
         # Replacing the last -1 by 0 because it goes an iteration too far.
         _derivative_principal_residuals[-3:, -6:] = np.zeros((3,6))
