@@ -65,6 +65,7 @@ def display_last_traj(Q: np.ndarray, nq : int):
     for iter in range(int(len(Q)/nq)):
         q_iter = get_q_iter_from_Q(Q,iter,nq)
         vis.display(q_iter)
+        print("Step")
         input()
 
 
@@ -82,8 +83,8 @@ if __name__ == "__main__":
     vis = create_visualizer(robot)
 
     # Creating the QP 
-    T = 10
-    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T, k1 = 10, k2=100 )
+    T = 5
+    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T, k1 = 1, k2=10 )
 
     # Initial configuration
     q0 = pin.randomConfiguration(rmodel)
@@ -97,19 +98,28 @@ if __name__ == "__main__":
     print(len(Q))
 
     # Trust region solver
-    trust_region_solver = NewtonMethodMt(QP.compute_cost, QP.grad, QP.hess, max_iter = 20, callback=None)
+    trust_region_solver = NewtonMethodMt(QP.compute_cost, QP.grad, QP.hess, max_iter = 100, callback=None)
     res = trust_region_solver(Q)
     list_fval_mt, list_gradfkval_mt, list_alphak_mt, list_reguk = trust_region_solver._fval_history, trust_region_solver._gradfval_history, trust_region_solver._alphak_history, trust_region_solver._reguk_history
 
     # Scipy solver
-    mini = fmin(QP.compute_cost, Q)
+    mini = fmin(QP.compute_cost, Q, full_output = True)
 
     # Gradient descent solver
-    newton_method = Solver(QP.compute_cost, QP.grad, QP.hess, max_iter=20, verbose = True, step_type="newton")
+    newton_method = Solver(QP.compute_cost, QP.grad, QP.hess, max_iter=100, verbose = True, step_type="newton")
     res_nm = newton_method(Q)
+    traj_nm = newton_method._xval_k
     list_fval_nm, list_gradfkval_nm, list_alphak_nm = newton_method._fval_history, newton_method._gradfval_history, newton_method._alphak_history
 
+    # Trajectory of the Marc Toussaint method 
 
+    print("Press enter for displaying the trajectory of the newton's method from Marc Toussaint")
+    display_last_traj(traj_nm, rmodel.nq)
+
+    # Trajectory of the fmin method
+    print("Press enter now for the trajectory found by fmin method")
+    display_last_traj(mini[0],rmodel.nq)
+    print(mini)
     # Plotting the results
 
     plt.subplot(411)

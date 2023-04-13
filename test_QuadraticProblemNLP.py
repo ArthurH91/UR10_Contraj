@@ -7,6 +7,7 @@ import copy
 from QuadraticProblemNLP import QuadratricProblemNLP
 from RobotWrapper import RobotWrapper
 
+np.set_printoptions(precision=3, linewidth=300, suppress=True, threshold=10000)
 
 class TestQuadraticProblemNLP(unittest.TestCase):
 
@@ -39,17 +40,51 @@ class TestQuadraticProblemNLP(unittest.TestCase):
 
 
 
-    def _fdm_residuals(self, res, Q, eps = 1e-6):
-        derivative_residuals = np.zeros((len(Q),len(Q) +3 ))
-        residual = res(Q)
+    def _fdm__principal_residuals(self, res, Q, eps = 1e-6):
+        """Compute the finite difference method for the principal and initial residuals.
 
-        #Going through the columns
-        for i in range(len(Q)):
-                # Creating the vector Q composed only of the j-th element
-                Qc = np.zeros(len(Q))
-                Qc[i] = Q[i] + eps
-                derivative_residuals[i] = (res(Qc) - residual)/eps
-        return derivative_residuals
+        Parameters
+        ----------
+        res : function handle
+            Function computing the residual
+        Q : np.ndarray
+             Array at which the finite difference is calculated
+        eps : _type_, optional
+            Finite difference step, by default 1e-6
+        Returns
+        -------
+        derivative_residual_fdm : np.ndarray
+            Finite difference of the function res at Q.
+        """
+        # Creating a matrix 
+        derivative_residual_fdm = np.zeros((derivative_residuals.shape))
+        Q_tuple = (q_init, q_inter, q_target)
+
+        # Going through the q
+        for k in range(T+1):
+
+            # Creating an array full of 0 with only the right q in it, at the right place
+            Qc = np.zeros(Q.shape)
+            Qc[k*rmodel.nq : (k+1)*rmodel.nq] = Q_tuple[k]
+
+            # Creating an array full of 0 and with the right q in it, but with eps added to it
+            Qc_fdm = np.copy(Qc) 
+            Qc_fdm[k*rmodel.nq : (k+1)*rmodel.nq] += eps
+
+            # Computing both residuals and doing the finite difference method 
+            residual_fdm = (QP.compute_residuals(Qc_fdm) - QP.compute_residuals(Qc))/eps
+
+            # Filling the matrix
+            # Going through the columns
+            for iter in range(k*rmodel.nq, (k+1)*rmodel.nq):
+                derivative_residual_fdm[iter, iter] = residual_fdm[k*rmodel.nq]
+                residual_fdm = np.delete(residual_fdm, k*rmodel.nq)
+            if not k == T: 
+                for iter in range(k*rmodel.nq, (k+1)*rmodel.nq):
+                    derivative_residual_fdm[iter + rmodel.nq, iter] = residual_fdm[k*rmodel.nq]
+                    residual_fdm = np.delete(residual_fdm, k*rmodel.nq)
+
+        return derivative_residual_fdm
 
 
     # Tests 
@@ -101,7 +136,7 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         """
         self.assertEqual(principal_cost_handmade, cost, msg = "Error while computing the total cost")
 
-    def test_compute_derivative_principal_residuals_filled_part(self):
+    def test_det_compute_derivative_principal_residuals_filled_part(self):
         """Testing the function _compute_derivative_principal_residuals, as the matrix is composed of 2 identity matrixes where one is one line under the diagonal, the determinant should be equal to 1.
         Testing only the identity block matrix, not the whole one because computing the determinant is only feasible for a squared matrix
         """
@@ -119,13 +154,11 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         """
         pass
 
-    def test_grad(self):
+    def test_initial_and_principal_residual_derivative_finite_difference(self):
         """Testing the grad function with the finite difference method define before
         """
-        fdm_res = self._fdm_residuals(QP.compute_residuals, QP._Q)
-        print(f"fdm res : {fdm_res}")
-        print(f"derivative res : {QP._derivative_residuals}")
-        self.assertAlmostEqual(np.linalg.norm(fdm_res - QP._derivative_residuals), msg= "The residual is not the same as the finite difference one")
+        fdm_res = self._fdm__principal_residuals(QP.compute_residuals, QP._Q)
+        self.assertAlmostEqual(np.linalg.norm(fdm_res - derivative_principal_residuals),0, msg= "The residual is not the same as the finite difference one")
 
 
     
@@ -136,7 +169,8 @@ if __name__ == "__main__":
     robot, rmodel, gmodel = robot_wrapper(target=True)
     rdata = rmodel.createData()
     gdata = gmodel.createData()
-    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T=2)
+    T = 2
+    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T)
 
     # Variables for the tests of _get_q_iter_from_Q and _distance_endeff_target
     q_target = robot_wrapper._q_target  # Configuration array reaching the target
@@ -175,6 +209,7 @@ if __name__ == "__main__":
     QP._compute_derivative_residuals()
 
     derivative_principal_residuals = QP._compute_derivative_principal_residuals()
+    derivative_residuals = QP._derivative_residuals
 
     # Variables for computing the gradient 
     gradient = QP.grad(Q_target)
