@@ -26,7 +26,7 @@
 import numpy as np
 import pinocchio as pin
 import time
-from scipy.optimize import fmin
+from scipy.optimize import fmin_bfgs
 import matplotlib.pyplot as plt
 
 from RobotWrapper import RobotWrapper
@@ -70,7 +70,7 @@ def display_last_traj(Q: np.ndarray, nq : int):
 
 if __name__ == "__main__":
 
-    # pin.seed(0)
+    pin.seed(5)
 
     # Creation of the robot
     robot_wrapper = RobotWrapper()
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     traj = trust_region_solver._xval_k
 
     # Scipy solver
-    mini = fmin(QP.compute_cost, Q, full_output = True)
+    mini = fmin_bfgs(QP.compute_cost, Q, QP.grad, full_output = True)
 
     # Trajectory of the Marc Toussaint method 
 
