@@ -151,7 +151,7 @@ class QuadratricProblemNLP():
         self._Q = Q
         res = self.compute_residuals(Q)
 
-        self._initial_cost = 0.5 * np.linalg.norm(self._initial_residual)
+        self._initial_cost = 0.5 * np.linalg.norm(self._initial_residual) ** 2
         self._principal_cost = 0.5 * np.linalg.norm(self._principal_residual) ** 2 
         self._terminal_cost = 0.5 * np.linalg.norm(self._terminal_residual) ** 2
         self._cost = self._terminal_cost + self._principal_cost
@@ -192,8 +192,8 @@ class QuadratricProblemNLP():
         _derivative_principal_residuals : np.ndarray
             matrix describing the principal residuals derivatives
         """
-        _derivative_principal_residuals = self._k1 * (np.eye(self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T +1)) - np.eye(
-            self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq))
+        _derivative_principal_residuals = np.eye(self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T +1)) - np.eye(
+            self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq)
         
         # Replacing the last -1 by 0 because it goes an iteration too far.
         _derivative_principal_residuals[-3:, -6:] = np.zeros((3,6))

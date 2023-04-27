@@ -70,7 +70,7 @@ def display_last_traj(Q: np.ndarray, nq : int):
 
 if __name__ == "__main__":
 
-    pin.seed(5)
+    pin.seed(11)
 
     # Creation of the robot
     robot_wrapper = RobotWrapper()
@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     # Creating the QP 
     T = 6
-    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T, k1 = 1, k2=100 )
+    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T, k1 = 1, k2=1000 )
 
     # Initial configuration
     q0 = pin.randomConfiguration(rmodel)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
 
     # Trust region solver
     trust_region_solver = NewtonMethodMt(
-        QP.compute_cost, QP.grad, QP.hess, max_iter=100, callback=None)
+        QP.compute_cost, QP.grad, QP.hess, max_iter=200, callback=None)
 
     res = trust_region_solver(Q)
     list_fval_mt, list_gradfkval_mt, list_alphak_mt, list_reguk = trust_region_solver._fval_history, trust_region_solver._gradfval_history, trust_region_solver._alphak_history, trust_region_solver._reguk_history
