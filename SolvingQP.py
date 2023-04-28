@@ -70,7 +70,7 @@ def display_last_traj(Q: np.ndarray, nq : int):
 
 if __name__ == "__main__":
 
-    pin.seed(11)
+    # pin.seed(11)
 
     # Creation of the robot
     robot_wrapper = RobotWrapper()
@@ -97,48 +97,62 @@ if __name__ == "__main__":
 
     # Trust region solver
     trust_region_solver = NewtonMethodMt(
-        QP.compute_cost, QP.grad, QP.hess, max_iter=200, callback=None)
+        QP.compute_cost, QP.grad, QP.hess, max_iter=100, callback=None)
 
     res = trust_region_solver(Q)
     list_fval_mt, list_gradfkval_mt, list_alphak_mt, list_reguk = trust_region_solver._fval_history, trust_region_solver._gradfval_history, trust_region_solver._alphak_history, trust_region_solver._reguk_history
     traj = trust_region_solver._xval_k
 
-    # Scipy solver
-    mini = fmin(QP.compute_cost, Q, full_output = True)
+    # # Scipy solver
+    # mini = fmin(QP.compute_cost, Q, full_output = True)
+
+    # Trust region solver with finite difference
+    trust_region_solver_nd = NewtonMethodMt(
+        QP.compute_cost, QP._grad_numdiff, QP._hess_numdiff, max_iter=100, callback=None)
+
+    res = trust_region_solver_nd(Q)
+    list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = trust_region_solver_nd._fval_history, trust_region_solver_nd._gradfval_history, trust_region_solver_nd._alphak_history, trust_region_solver_nd._reguk_history
+    traj_nd = trust_region_solver_nd._xval_k
 
     # Trajectory of the Marc Toussaint method 
 
     print("Press enter for displaying the trajectory of the newton's method from Marc Toussaint")
     display_last_traj(traj, rmodel.nq)
 
+    print("Now the trajectory of the same method but with the num diff")
+    display_last_traj(traj_nd, rmodel.nq)
 
     plt.subplot(411)
     plt.plot(list_fval_mt, "-ob", label="Marc Toussaint's method")
+    plt.plot(list_fval_mt_nd, "-or", label="Finite difference method")
     plt.yscale("log")
     plt.ylabel("Cost")
     plt.legend()
 
     plt.subplot(412)
     plt.plot(list_gradfkval_mt, "-ob", label="Marc Toussaint's method")
+    plt.plot(list_gradfkval_mt_nd, "-or", label="Finite difference method")
     plt.yscale("log")
     plt.ylabel("Gradient")
     plt.legend()
 
     plt.subplot(413)
     plt.plot(list_alphak_mt,  "-ob", label="Marc Toussaint's method")
+    plt.plot(list_alphak_mt_nd,  "-or", label="Finite difference method")
     plt.yscale("log")
     plt.ylabel("Alpha")
     plt.legend()
 
     plt.subplot(414)
     plt.plot(list_reguk, "-ob", label="Marc Toussaint's method")
+    plt.plot(list_reguk_nd, "-or", label="Finite difference method")
     plt.yscale("log")
     plt.ylabel("Regularization")
     plt.xlabel("Iterations")
     plt.legend()
 
     plt.suptitle(
-        " Comparison Newton's method and Marc Toussaint's Newton method")
+        " Comparison between Marc Toussaint's Newton method and finite difference method")
     plt.show()
 
-    print(trust_region_solver._xval_k)
+    # print(trust_region_solver._xval_k)
