@@ -193,8 +193,8 @@ class QuadratricProblemNLP():
         _derivative_principal_residuals : np.ndarray
             matrix describing the principal residuals derivatives
         """
-        _derivative_principal_residuals = np.eye(self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T +1)) - np.eye(
-            self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq)
+        _derivative_principal_residuals = (np.eye(self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T +1)) - np.eye(
+            self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq))*(self._k1**2/2)
         
         # Replacing the last -1 by 0 because it goes an iteration too far.
         _derivative_principal_residuals[-3:, -6:] = np.zeros((3,6))
@@ -212,7 +212,11 @@ class QuadratricProblemNLP():
         q_terminal = self._get_q_iter_from_Q(self._T)
 
         # Computing the joint jacobian from pinocchio, used as the terminal residual derivative
-        _derivative_terminal_residuals = self._k2 **2 * pin.computeJointJacobian(self._rmodel, self._rdata, q_terminal, 6)[:3, :]
+        ##_derivative_terminal_residuals = self._k2 **2/2 * pin.computeJointJacobian(self._rmodel, self._rdata, q_terminal, 6)[:3, :]
+        pin.computeJointJacobians(self._rmodel, self._rdata, q_terminal)
+        J = pin.getFrameJacobian(self._rmodel, self._rdata, self._EndeffID, pin.LOCAL_WORLD_ALIGNED)
+        _derivative_terminal_residuals = self._k2 **2/2 * J[:3]
+
         return _derivative_terminal_residuals
 
     def _compute_derivative_residuals(self):
