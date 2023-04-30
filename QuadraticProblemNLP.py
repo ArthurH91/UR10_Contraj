@@ -74,6 +74,7 @@ class QuadratricProblemNLP():
         assert (self._EndeffID < len(self._rmodel.frames))
 
         # Storing the cartesian pose of the target
+        pin.framesForwardKinematics(self._rmodel,self._rdata,self._robot.q0)
         self._target = self._rdata.oMf[self._TargetID].translation
 
 
@@ -113,13 +114,13 @@ class QuadratricProblemNLP():
         self._initial_residual = self._get_q_iter_from_Q(0) - self._robot.q0
 
         # Penalizing the initial residual
-        self._initial_residual *= self._k1
+        self._initial_residual *= self._k1**2/2
 
         # Computing the principal residual 
-        self._principal_residual = self._get_difference_between_q_iter(0)
+        self._principal_residual = self._get_difference_between_q_iter(0) * self._k1**2/2
 
         for iter in range(1,self._T):
-            self._principal_residual = np.concatenate( (self._principal_residual, self._get_difference_between_q_iter(iter)), axis=None)
+            self._principal_residual = np.concatenate( (self._principal_residual, self._get_difference_between_q_iter(iter) * self._k1**2/2), axis=None)
 
         # Computing the terminal residual
 
