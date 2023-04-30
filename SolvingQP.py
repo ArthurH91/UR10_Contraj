@@ -24,9 +24,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import numpy as np
+from numpy.linalg import norm
 import pinocchio as pin
 import time
-from scipy.optimize import fmin
+from scipy.optimize import fmin,fmin_bfgs
 import matplotlib.pyplot as plt
 import pinocchio.casadi as cpin
 import casadi
@@ -39,10 +40,17 @@ from Solver import Solver
 
 ### HYPERPARMS
 T = 6
-k1 = 1#.01
-k2 = 1
-SEED = 11 ## Randomization is currently useless
+k1 = .01
+k2 = 2
 
+SEED = 11 # Casadi and TRS converge to the same results
+SEED = abs(int(np.sin(time.time() % 6.28) * 1000))
+print(f'SEED = {SEED}' )
+
+WITH_DISPLAY = False
+WITH_PLOT = False
+WITH_NUMDIFF_SOLVE = False
+WARMSTART_IPOPT_WITH_TRS = True
 
 def get_q_iter_from_Q(Q : np.ndarray, iter: int, nq: int):
     """Returns the iter-th configuration vector q_iter in the Q array.
@@ -60,7 +68,7 @@ def get_q_iter_from_Q(Q : np.ndarray, iter: int, nq: int):
 
 
 
-def display_last_traj(Q: np.ndarray, nq : int):
+def display_last_traj(Q: np.ndarray, T : int, dt = None):
     """Display the trajectory computed by the solver
 
     Parameters
@@ -70,10 +78,12 @@ def display_last_traj(Q: np.ndarray, nq : int):
     nq : int
         size of q_iter
     """
-    for iter in range(int(len(Q)/nq)):
-        q_iter = get_q_iter_from_Q(Q,iter,nq)
+    for q_iter in [robot.q0]+np.split(Q,T+1):
         vis.display(q_iter)
-        input()
+        if dt is None:
+            input()
+        else:
+            time.sleep(dt)
 
 class CasadiSolver:
     def __init__(self,QP):
@@ -83,7 +93,7 @@ class CasadiSolver:
         self.QP = QP
 
 
-    def solve(self):
+    def solve(self,Q0=None):
         '''
         Solve the OCP problem defined in QP using Casadi (for derivatives)
         and IpOpt (for NLP algorithm).
@@ -98,6 +108,7 @@ class CasadiSolver:
         T = QP._T
         k1 = QP._k1
         k2 = QP._k2
+        q0 = QP._robot.q0
 
         ### CASADI HELPERS
         cmodel = cpin.Model(QP._rmodel)
@@ -119,9 +130,16 @@ class CasadiSolver:
         self.residuals = residuals = casadi.vertcat(*residuals)
 
         ### Optim
-        opti.minimize(casadi.sumsqr(residuals))
-        #for x in xs: opti.set_initial(x,x0)
-
+        opti.minimize(casadi.sumsqr(residuals)/2)
+        if Q0 is not None:
+            print(' With specific warm start' )
+            for qws,vq in zip(np.split(Q0,T+1),qs):
+                opti.set_initial(vq,qws)
+        else:
+            print(' With default (q0) warm start' )
+            for vq in qs:
+                opti.set_initial(vq,q0)
+                
         opti.solver("ipopt") # set numerical backend
         # Caution: in case the solver does not converge, we are picking the candidate values
         # at the last iteration in opti.debug, and they are NO guarantee of what they mean.
@@ -180,7 +198,7 @@ if __name__ == "__main__":
 
     # Initial configuration
     q0 = pin.randomConfiguration(rmodel)
-    q0 = np.array([0, -2.5, 2, -1.2, -1.7, 0])
+    #q0 = np.array([0, -2.5, 2, -1.2, -1.7, 0])
     robot.q0 = q0
     vis.display(q0)
 
@@ -193,64 +211,93 @@ if __name__ == "__main__":
     trust_region_solver = NewtonMethodMt(
         QP.compute_cost, QP.grad, QP.hess, max_iter=100, callback=None)
 
+    
     trust_region_solver(Q0)
     list_fval_mt, list_gradfkval_mt, list_alphak_mt, list_reguk = trust_region_solver._fval_history, trust_region_solver._gradfval_history, trust_region_solver._alphak_history, trust_region_solver._reguk_history
     Q_trs = trust_region_solver._xval_k
     residuals_trs = QP.compute_residuals(Q_trs)
-    
-    # # Scipy solver
-    # mini = fmin(QP.compute_cost, Q, full_output = True)
 
-    # Trust region solver with finite difference
-    # trust_region_solver_nd = NewtonMethodMt(
-    #     QP.compute_cost, QP._grad_numdiff, QP._hess_numdiff, max_iter=100, callback=None)
-    # res = trust_region_solver_nd(Q)
-    # list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = trust_region_solver_nd._fval_history, trust_region_solver_nd._gradfval_history, trust_region_solver_nd._alphak_history, trust_region_solver_nd._reguk_history
-    # traj_nd = trust_region_solver_nd._xval_k
+    if WITH_NUMDIFF_SOLVE:
+        # # Scipy solver
+        mini = fmin_bfgs(QP.compute_cost, Q0, full_output = True)
+        Q_fmin = mini
 
-    # Trajectory of the Marc Toussaint method 
+        # Trust region solver with finite difference
+        trust_region_solver_nd = NewtonMethodMt(
+            QP.compute_cost, QP._grad_numdiff, QP._hess_numdiff, max_iter=100, callback=None)
+        res = trust_region_solver_nd(Q0)
+        list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = trust_region_solver_nd._fval_history, trust_region_solver_nd._gradfval_history, trust_region_solver_nd._alphak_history, trust_region_solver_nd._reguk_history
+        Q_nd = trust_region_solver_nd._xval_k
 
+    # Casadi+IpOpt solver
     casadiSolver = CasadiSolver(QP)
-    Q_casadi,residuals_casadi =  casadiSolver.solve()
+    Q_casadi,residuals_casadi =  casadiSolver.solve(Q_trs if WARMSTART_IPOPT_WITH_TRS else None)
     J_casadi = casadiSolver.evalJacobian(Q_casadi)
-    
-    # print("Press enter for displaying the trajectory of the newton's method from Marc Toussaint")
-    # display_last_traj(traj, rmodel.nq)
 
-    # print("Now the trajectory of the same method but with the num diff")
-    # display_last_traj(traj_nd, rmodel.nq)
+    # ### NUMDIFF unittest
+    Qr=np.random.rand((T+1)*rmodel.nq)*6-3
+    gnd = QP._grad_numdiff(Qr)
+    Jr=casadiSolver.evalJacobian(Qr)
+    rr=casadiSolver.evalResiduals(Qr)
+    gcas = Jr.T@rr
+    galg = QP.grad(Qr)
+    assert( norm(gcas-galg,np.inf)<1e-9 )
+    assert( norm(gnd-galg,np.inf)<1e-3 )
 
-    # plt.subplot(411)
-    # plt.plot(list_fval_mt, "-ob", label="Marc Toussaint's method")
-    # plt.plot(list_fval_mt_nd, "-or", label="Finite difference method")
-    # plt.yscale("log")
-    # plt.ylabel("Cost")
-    # plt.legend()
 
-    # plt.subplot(412)
-    # plt.plot(list_gradfkval_mt, "-ob", label="Marc Toussaint's method")
-    # plt.plot(list_gradfkval_mt_nd, "-or", label="Finite difference method")
-    # plt.yscale("log")
-    # plt.ylabel("Gradient")
-    # plt.legend()
+    if WITH_DISPLAY:
+        print("Press enter for displaying the trajectory of the newton's method from Marc Toussaint")
+        display_last_traj(Q_trs, T)
+        if WITH_NUMDIFF_SOLVE:
+            print("Now the trajectory of the same method but with the num diff")
+            display_last_traj(Q_nd, T)
 
-    # plt.subplot(413)
-    # plt.plot(list_alphak_mt,  "-ob", label="Marc Toussaint's method")
-    # plt.plot(list_alphak_mt_nd,  "-or", label="Finite difference method")
-    # plt.yscale("log")
-    # plt.ylabel("Alpha")
-    # plt.legend()
+    if WITH_PLOT:
+        plt.subplot(411)
+        plt.plot(list_fval_mt, "-ob", label="Marc Toussaint's method")
+        if WITH_NUMDIFF_SOLVE:
+            plt.plot(list_fval_mt_nd, "-or", label="Finite difference method")
+        plt.yscale("log")
+        plt.ylabel("Cost")
+        plt.legend()
+        
+        plt.subplot(412)
+        plt.plot(list_gradfkval_mt, "-ob", label="Marc Toussaint's method")
+        if WITH_NUMDIFF_SOLVE:
+            plt.plot(list_gradfkval_mt_nd, "-or", label="Finite difference method")
+        plt.yscale("log")
+        plt.ylabel("Gradient")
+        plt.legend()
+        
+        plt.subplot(413)
+        plt.plot(list_alphak_mt,  "-ob", label="Marc Toussaint's method")
+        if WITH_NUMDIFF_SOLVE:
+            plt.plot(list_alphak_mt_nd,  "-or", label="Finite difference method")
+        plt.yscale("log")
+        plt.ylabel("Alpha")
+        plt.legend()
 
-    # plt.subplot(414)
-    # plt.plot(list_reguk, "-ob", label="Marc Toussaint's method")
-    # plt.plot(list_reguk_nd, "-or", label="Finite difference method")
-    # plt.yscale("log")
-    # plt.ylabel("Regularization")
-    # plt.xlabel("Iterations")
-    # plt.legend()
+        plt.subplot(414)
+        plt.plot(list_reguk, "-ob", label="Marc Toussaint's method")
+        if WITH_NUMDIFF_SOLVE:
+            plt.plot(list_reguk_nd, "-or", label="Finite difference method")
+        plt.yscale("log")
+        plt.ylabel("Regularization")
+        plt.xlabel("Iterations")
+        plt.legend()
 
-    # plt.suptitle(
-    #     " Comparison between Marc Toussaint's Newton method and finite difference method")
-    # plt.show()
+        plt.suptitle(
+            " Comparison between Marc Toussaint's Newton method and finite difference method")
+        plt.show()
 
-    # # print(trust_region_solver._xval_k)
+    np.set_printoptions(precision=3, linewidth=600, suppress=True) 
+    print('Optimal trajectory: \n\t', '\n\t '.join([repr(q) for q in np.split(Q_casadi,T+1)]))
+    pin.framesForwardKinematics(rmodel,rdata,Q_casadi[-rmodel.nq:])
+    print('Terminal position:', rdata.oMf[QP._EndeffID].translation, ' vs ', QP._target)
+    print(f'Distance between IpOpt and TRS solvers {norm(Q_casadi-Q_trs,np.inf)} ' )
+    assert( np.allclose(Q_casadi,Q_trs,atol=1e-7,rtol=1e-3) )
+    if WITH_NUMDIFF_SOLVE:
+        print(f'Distance between IpOpt and ND solvers {norm(Q_casadi-Q_nd,np.inf)} ' )
+        assert( np.allclose(Q_casadi,Q_nd,atol=1e-3,rtol=10) )
+        print(f'Distance between ND and TRS solvers {norm(Q_nd-Q_trs,np.inf)} ' )
+        assert( np.allclose(Q_trs,Q_nd,atol=1e-3,rtol=10) )
