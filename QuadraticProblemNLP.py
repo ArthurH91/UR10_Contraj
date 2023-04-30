@@ -152,10 +152,10 @@ class QuadratricProblemNLP():
         self._Q = Q
         res = self.compute_residuals(Q)
 
-        self._initial_cost = 0.5 * np.linalg.norm(self._initial_residual) ** 2
-        self._principal_cost = 0.5 * np.linalg.norm(self._principal_residual) ** 2 
-        self._terminal_cost = 0.5 * np.linalg.norm(self._terminal_residual) ** 2
-        self._cost = self._terminal_cost + self._principal_cost
+        self._initial_cost = 0.5 * sum(self._initial_residual ** 2)
+        self._principal_cost = 0.5 * sum(self._principal_residual ** 2)
+        self._terminal_cost = 0.5 * sum(self._terminal_residual ** 2)
+        self._cost = self._initial_cost + self._terminal_cost + self._principal_cost
         return self._cost
 
 
@@ -360,7 +360,7 @@ if __name__ == "__main__":
     Q = np.concatenate((q0, q1, q2, q3))
     T = int((len(Q) - 1) / rmodel.nq) 
 
-    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T=T, k1 = 10, k2=1 )
+    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T=T, k1 = .01, k2=1 )
 
     QP._Q = Q
 
@@ -369,3 +369,4 @@ if __name__ == "__main__":
     grad_numdiff = QP._grad_numdiff(Q)
     hessval_numdiff = QP._hess_numdiff(Q)
 
+    assert( np.linalg.norm(grad-grad_numdiff,np.inf) < 1e-7 )
