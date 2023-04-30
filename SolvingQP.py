@@ -37,6 +37,12 @@ from QuadraticProblemNLP import QuadratricProblemNLP
 from NewtonMethodMarcToussaint import NewtonMethodMt
 from Solver import Solver
 
+### HYPERPARMS
+T = 6
+k1 = 1#.01
+k2 = 1
+SEED = 11 ## Randomization is currently useless
+
 
 def get_q_iter_from_Q(Q : np.ndarray, iter: int, nq: int):
     """Returns the iter-th configuration vector q_iter in the Q array.
@@ -69,55 +75,96 @@ def display_last_traj(Q: np.ndarray, nq : int):
         vis.display(q_iter)
         input()
 
-def solve_with_casadi(QP):
-    # HYPERPARAMS
-    T = QP._T
-    k1 = QP._k1
-    k2 = QP._k2
-
-    #def solve_with_casadi(QP):
-    ### CASADI HELPERS
-    cmodel = cpin.Model(QP._rmodel)
-    cdata = cmodel.createData()
-    cq = casadi.SX.sym('q',QP._rmodel.nq)
-
-    cpin.framesForwardKinematics(cmodel, cdata,cq)
-    endeff = casadi.Function('p',[cq],[cdata.oMf[QP._EndeffID].translation])
+class CasadiSolver:
+    def __init__(self,QP):
+        '''
+        Trivial initialization from a QP object as defined by Arthur.
+        '''
+        self.QP = QP
 
 
-    ### CASADI PROBLEM
+    def solve(self):
+        '''
+        Solve the OCP problem defined in QP using Casadi (for derivatives)
+        and IpOpt (for NLP algorithm).
+        All hyperparms are taken from QP. The functions are reimplemented,
+        so beware of possible differences (no automatic enforcement).
+        Returns the optimal variable and the residuals at optimum.
+        '''
+        
+        QP  = self.QP
 
-    opti = casadi.Opti()
-    # Decision variables
-    qs = [ opti.variable(QP._rmodel.nq) for model in range(T+1) ]
+        # HYPERPARAMS
+        T = QP._T
+        k1 = QP._k1
+        k2 = QP._k2
 
-    residuals = \
-        [ (k1**2/2)*(qs[0]-q0) ] \
-        + [ (k1**2/2)*(qa-qb) for (qa,qb) in zip(qs[1:],qs[:-1]) ] \
-        + [ (k2**2/2)*(endeff(qs[-1])-QP._target) ]
-    residuals = casadi.vertcat(*residuals)
+        ### CASADI HELPERS
+        cmodel = cpin.Model(QP._rmodel)
+        cdata = cmodel.createData()
+        cq = casadi.SX.sym('q',QP._rmodel.nq)
 
-    ### Optim
-    opti.minimize(casadi.sumsqr(residuals))
-    #for x in xs: opti.set_initial(x,x0)
+        cpin.framesForwardKinematics(cmodel, cdata,cq)
+        endeff = casadi.Function('p',[cq],[cdata.oMf[QP._EndeffID].translation])
 
-    opti.solver("ipopt") # set numerical backend
-    # Caution: in case the solver does not converge, we are picking the candidate values
-    # at the last iteration in opti.debug, and they are NO guarantee of what they mean.
-    try:
-        sol = opti.solve_limited()
-        qs_sol = np.concatenate([ opti.value(q) for q in qs ])
-        residuals_sol = opti.value(residuals)
-    except:
-        print('ERROR in convergence, plotting debug info.')
-        qs_sol = np.concatenate([ opti.debug.value(q) for q in qs ])
-        residuals_sol = opti.debug.value(residuals)
+        ### CASADI PROBLEM
+        self.opti = opti = casadi.Opti()
+        # Decision variables
+        self.var_qs = qs = [ opti.variable(QP._rmodel.nq) for model in range(T+1) ]
 
-    return qs_sol,residuals_sol
+        residuals = \
+            [ (k1**2/2)*(qs[0]-q0) ] \
+            + [ (k1**2/2)*(qa-qb) for (qa,qb) in zip(qs[1:],qs[:-1]) ] \
+            + [ (k2**2/2)*(endeff(qs[-1])-QP._target) ]
+        self.residuals = residuals = casadi.vertcat(*residuals)
 
+        ### Optim
+        opti.minimize(casadi.sumsqr(residuals))
+        #for x in xs: opti.set_initial(x,x0)
+
+        opti.solver("ipopt") # set numerical backend
+        # Caution: in case the solver does not converge, we are picking the candidate values
+        # at the last iteration in opti.debug, and they are NO guarantee of what they mean.
+        try:
+            sol = opti.solve_limited()
+            qs_sol = np.concatenate([ opti.value(q) for q in qs ])
+            residuals_sol = opti.value(residuals)
+        except:
+            print('ERROR in convergence, plotting debug info.')
+            qs_sol = np.concatenate([ opti.debug.value(q) for q in qs ])
+            residuals_sol = opti.debug.value(residuals)
+
+        return qs_sol,residuals_sol
+
+    def evalResiduals(self,Q):
+        '''
+        Evaluate (numerical value) the residual of the problem for a numerical 
+        trajectory Q = np.array((T+1)*NQ).
+        Returns the np.array((T+1)*NQ+3)
+        '''
+        Q = np.split(Q,self.QP._T+1)
+        r = self.residuals
+        for var,val in zip( self.var_qs,Q):
+            r=casadi.substitute(r,var,val)
+        return np.array(casadi.evalf(r)).squeeze()
+
+    def evalJacobian(self,Q):
+        Q = np.split(Q,self.QP._T+1)
+        r = self.residuals
+        J = []
+        for varq,valq in zip(self.var_qs,Q):
+            Jk = casadi.jacobian(r,varq)
+            # In general, the Jacobian would need a substituttion with respect
+            # to all variables. For this particular problem, the substitution
+            # below is sufficient, but that might not work if you modify the
+            # problem (for example, if some cost q_0*q_1 is added)
+            Jk = np.array(casadi.evalf(casadi.substitute(Jk,varq,valq)))
+            J.append(Jk)
+        return np.hstack(J)
+        
 if __name__ == "__main__":
 
-    pin.seed(11)
+    pin.seed(SEED)
 
     # Creation of the robot
     robot_wrapper = RobotWrapper()
@@ -129,8 +176,7 @@ if __name__ == "__main__":
     vis = create_visualizer(robot)
 
     # Creating the QP 
-    T = 6
-    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T, k1 = .01, k2=1 )
+    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T, k1 = k1, k2 = k2)
 
     # Initial configuration
     q0 = pin.randomConfiguration(rmodel)
@@ -164,8 +210,9 @@ if __name__ == "__main__":
 
     # Trajectory of the Marc Toussaint method 
 
-
-    Q_casadi,residuals_casadi = solve_with_casadi(QP)
+    casadiSolver = CasadiSolver(QP)
+    Q_casadi,residuals_casadi =  casadiSolver.solve()
+    J_casadi = casadiSolver.evalJacobian(Q_casadi)
     
     # print("Press enter for displaying the trajectory of the newton's method from Marc Toussaint")
     # display_last_traj(traj, rmodel.nq)
