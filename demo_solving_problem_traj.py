@@ -35,6 +35,7 @@ from create_visualizer import create_visualizer
 from problem_traj import QuadratricProblemNLP
 from solver_newton_mt import SolverNewtonMt
 from dedicated_solver_casadi import CasadiSolver
+from generate_reachable_target import generateReachableTarget
 
 # ### HYPERPARMS
 T = 6
@@ -43,12 +44,13 @@ WEIGHT_DQ = .001
 WEIGHT_TERM_POS = 4
 
 TARGET = np.array([ -.155,-.815,.456 ])
+TARGET = "random"
 
 INITIAL_CONFIG = np.array([0, -2.5, 2, -1.2, -1.7, 0])
 INITIAL_CONFIG = "random"
 
 SEED = abs(int(np.sin(time.time() % 6.28) * 1000))
-SEED = 11 # TRS does not perfectly converge, slight difference with IpOpt
+SEED = 573 # TRS does not perfectly converge, slight difference with IpOpt
 SEED = 1 # Perfect convergence to solution, immediate convergence of IpOpt (with WS)
 print(f'SEED = {SEED}' )
 
@@ -100,14 +102,13 @@ if __name__ == "__main__":
     rdata = rmodel.createData()
     gdata = gmodel.createData()
 
-    # Open the viewer
-    vis = create_visualizer(robot)
-
-    # Initial configuration
+    # Initial configuration and target
     if INITIAL_CONFIG == "random":
         INITIAL_CONFIG = pin.randomConfiguration(rmodel)
-    vis.display(INITIAL_CONFIG)
+    if TARGET == "random":
+        TARGET = generateReachableTarget(rmodel,rdata).translation
 
+        
     # Creating the QP 
     QP = QuadratricProblemNLP(robot, rmodel,
                               q0 = INITIAL_CONFIG,
@@ -116,6 +117,10 @@ if __name__ == "__main__":
                               weight_q0 = WEIGHT_Q0,
                               weight_dq = WEIGHT_DQ,
                               weight_term_pos = WEIGHT_TERM_POS)
+
+    # Open the viewer
+    vis = create_visualizer(robot)
+    vis.display(INITIAL_CONFIG)
 
     # Initial trajectory 
     Q0 = np.concatenate([ INITIAL_CONFIG ]*(T+1) )

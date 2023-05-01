@@ -127,7 +127,10 @@ class RobotWrapper():
 
         # Creating the frame of the target
 
-        self._M_target = self._generate_reachable_SE3_vector()
+        # Previously, was carefully selected at robot creation time
+        # Avoid to concentrate all hyperparams at the same place
+        # self._M_target = self._generate_reachable_SE3_vector()
+        self._M_target = pin.SE3.Identity()
 
         target_frame = pin.Frame("target", self._rmodel.getJointId(
             "universe"), self._M_target, pin.BODY)
@@ -139,27 +142,6 @@ class RobotWrapper():
 
         geom_target.meshColor = self._color
         self._gmodel.addGeometryObject(geom_target)
-
-
-    def _generate_reachable_SE3_vector(self):
-        """ Generate a SE3 vector that can be reached by the robot.
-
-        Returns
-        -------
-        Reachable_SE3_vector
-            SE3 Vector describing a reachable position by the robot
-        """
-        
-        # Generate a random configuration of the robot, with consideration to its limits
-        self._q_target = pin.randomConfiguration(self._rmodel)
-        # Creation of a temporary model.Data, to have access to the forward kinematics.
-        ndata = self._rmodel.createData()
-        # Updating the model.Data with the framesForwardKinematics
-        pin.framesForwardKinematics(self._rmodel, ndata, self._q_target)
-
-        return ndata.oMf[self._rmodel.getFrameId('endeff')]
-
-
 
 if __name__ == "__main__":
 
