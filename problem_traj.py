@@ -27,8 +27,7 @@ import numpy as np
 import pinocchio as pin
 import copy
 
-from RobotWrapper import RobotWrapper
-from create_visualizer import create_visualizer
+from robot_wrapper import RobotWrapper
 
 # This class is for defining the optimization problem and computing the cost function, its gradient and hessian.
 
@@ -367,7 +366,6 @@ if __name__ == "__main__":
     robot, rmodel, gmodel = robot_wrapper(target=True)
     rdata = rmodel.createData()
     gdata = gmodel.createData()
-    vis = create_visualizer(robot)
 
     q = pin.randomConfiguration(rmodel)
 
@@ -375,7 +373,6 @@ if __name__ == "__main__":
 
     # THIS STEP IS MANDATORY OTHERWISE THE FRAMES AREN'T UPDATED
     pin.updateGeometryPlacements(rmodel, rdata, gmodel, gdata, q)
-    vis.display(q)
 
     q0 = np.array([1, 1, 1, 1, 1, 1])
     q1 = np.array([2.1, 2.1 ,2.1 ,2.1,2.1,2.1])
