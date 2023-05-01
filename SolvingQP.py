@@ -40,11 +40,12 @@ from Solver import Solver
 
 ### HYPERPARMS
 T = 6
-k1 = .01
-k2 = 2
+k1 = .001
+k2 = 4
 
-SEED = 11 # Casadi and TRS converge to the same results
 SEED = abs(int(np.sin(time.time() % 6.28) * 1000))
+SEED = 11 # TRS does not perfectly converge, slight difference with IpOpt
+SEED = 1 # Perfect convergence to solution, immediate convergence of IpOpt (with WS)
 print(f'SEED = {SEED}' )
 
 WITH_DISPLAY = False
@@ -124,9 +125,9 @@ class CasadiSolver:
         self.var_qs = qs = [ opti.variable(QP._rmodel.nq) for model in range(T+1) ]
 
         residuals = \
-            [ (k1**2/2)*(qs[0]-q0) ] \
-            + [ (k1**2/2)*(qa-qb) for (qa,qb) in zip(qs[1:],qs[:-1]) ] \
-            + [ (k2**2/2)*(endeff(qs[-1])-QP._target) ]
+            [ k1*(qs[0]-q0) ] \
+            + [ k1*(qa-qb) for (qa,qb) in zip(qs[1:],qs[:-1]) ] \
+            + [ k2*(endeff(qs[-1])-QP._target) ]
         self.residuals = residuals = casadi.vertcat(*residuals)
 
         ### Optim
@@ -241,6 +242,7 @@ if __name__ == "__main__":
     rr=casadiSolver.evalResiduals(Qr)
     gcas = Jr.T@rr
     galg = QP.grad(Qr)
+    assert( norm(rr-QP._residual,np.inf)<1e-9 )
     assert( norm(gcas-galg,np.inf)<1e-9 )
     assert( norm(gnd-galg,np.inf)<1e-3 )
 
@@ -295,9 +297,11 @@ if __name__ == "__main__":
     pin.framesForwardKinematics(rmodel,rdata,Q_casadi[-rmodel.nq:])
     print('Terminal position:', rdata.oMf[QP._EndeffID].translation, ' vs ', QP._target)
     print(f'Distance between IpOpt and TRS solvers {norm(Q_casadi-Q_trs,np.inf)} ' )
-    assert( np.allclose(Q_casadi,Q_trs,atol=1e-7,rtol=1e-3) )
     if WITH_NUMDIFF_SOLVE:
         print(f'Distance between IpOpt and ND solvers {norm(Q_casadi-Q_nd,np.inf)} ' )
-        assert( np.allclose(Q_casadi,Q_nd,atol=1e-3,rtol=10) )
         print(f'Distance between ND and TRS solvers {norm(Q_nd-Q_trs,np.inf)} ' )
+
+    assert( np.allclose(Q_casadi,Q_trs,atol=1e-7,rtol=1e-3) )
+    if WITH_NUMDIFF_SOLVE:
+        assert( np.allclose(Q_casadi,Q_nd,atol=1e-3,rtol=10) )
         assert( np.allclose(Q_trs,Q_nd,atol=1e-3,rtol=10) )

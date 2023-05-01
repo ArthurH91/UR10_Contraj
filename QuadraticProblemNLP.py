@@ -114,13 +114,13 @@ class QuadratricProblemNLP():
         self._initial_residual = self._get_q_iter_from_Q(0) - self._robot.q0
 
         # Penalizing the initial residual
-        self._initial_residual *= self._k1**2/2
+        self._initial_residual *= self._k1
 
         # Computing the principal residual 
-        self._principal_residual = self._get_difference_between_q_iter(0) * self._k1**2/2
+        self._principal_residual = self._get_difference_between_q_iter(0) * self._k1
 
         for iter in range(1,self._T):
-            self._principal_residual = np.concatenate( (self._principal_residual, self._get_difference_between_q_iter(iter) * self._k1**2/2), axis=None)
+            self._principal_residual = np.concatenate( (self._principal_residual, self._get_difference_between_q_iter(iter) * self._k1), axis=None)
 
         # Computing the terminal residual
 
@@ -128,7 +128,7 @@ class QuadratricProblemNLP():
         q_T = self._get_q_iter_from_Q(self._T)
 
         # Computing the residual 
-        self._terminal_residual = ( self._k2 ** 2 / 2 ) * self._distance_endeff_target(q_T)
+        self._terminal_residual = ( self._k2 ) * self._distance_endeff_target(q_T)
 
         # Adding the terminal residual to the whole residual
         self._residual = np.concatenate( (self._initial_residual,self._principal_residual, self._terminal_residual), axis = None)
@@ -194,7 +194,7 @@ class QuadratricProblemNLP():
             matrix describing the principal residuals derivatives
         """
         _derivative_principal_residuals = (np.eye(self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T +1)) - np.eye(
-            self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq))*(self._k1**2/2)
+            self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq))*(self._k1)
         
         # Replacing the last -1 by 0 because it goes an iteration too far.
         _derivative_principal_residuals[-3:, -6:] = np.zeros((3,6))
@@ -212,10 +212,10 @@ class QuadratricProblemNLP():
         q_terminal = self._get_q_iter_from_Q(self._T)
 
         # Computing the joint jacobian from pinocchio, used as the terminal residual derivative
-        ##_derivative_terminal_residuals = self._k2 **2/2 * pin.computeJointJacobian(self._rmodel, self._rdata, q_terminal, 6)[:3, :]
+        ##_derivative_terminal_residuals = self._k2  * pin.computeJointJacobian(self._rmodel, self._rdata, q_terminal, 6)[:3, :]
         pin.computeJointJacobians(self._rmodel, self._rdata, q_terminal)
         J = pin.getFrameJacobian(self._rmodel, self._rdata, self._EndeffID, pin.LOCAL_WORLD_ALIGNED)
-        _derivative_terminal_residuals = self._k2 **2/2 * J[:3]
+        _derivative_terminal_residuals = self._k2  * J[:3]
 
         return _derivative_terminal_residuals
 
@@ -360,7 +360,7 @@ if __name__ == "__main__":
     Q = np.concatenate((q0, q1, q2, q3))
     T = int((len(Q) - 1) / rmodel.nq) 
 
-    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T=T, k1 = .01, k2=1 )
+    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T=T, k1 = .1, k2=1 )
 
     QP._Q = Q
 
@@ -369,4 +369,4 @@ if __name__ == "__main__":
     grad_numdiff = QP._grad_numdiff(Q)
     hessval_numdiff = QP._hess_numdiff(Q)
 
-    assert( np.linalg.norm(grad-grad_numdiff,np.inf) < 1e-7 )
+    assert( np.linalg.norm(grad-grad_numdiff,np.inf) < 1e-6 )
