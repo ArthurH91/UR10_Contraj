@@ -38,10 +38,16 @@ from QuadraticProblemNLP import QuadratricProblemNLP
 from NewtonMethodMarcToussaint import NewtonMethodMt
 from Solver import Solver
 
-### HYPERPARMS
+# ### HYPERPARMS
 T = 6
-k1 = .001
-k2 = 4
+WEIGHT_Q0 =  .001
+WEIGHT_DQ = .001
+WEIGHT_TERM_POS = 4
+
+TARGET = np.array([ -.155,-.815,.456 ])
+
+INITIAL_CONFIG = np.array([0, -2.5, 2, -1.2, -1.7, 0])
+INITIAL_CONFIG = "random"
 
 SEED = abs(int(np.sin(time.time() % 6.28) * 1000))
 SEED = 11 # TRS does not perfectly converge, slight difference with IpOpt
@@ -53,6 +59,7 @@ WITH_PLOT = False
 WITH_NUMDIFF_SOLVE = False
 WARMSTART_IPOPT_WITH_TRS = True
 
+# ### HELPERS
 def get_q_iter_from_Q(Q : np.ndarray, iter: int, nq: int):
     """Returns the iter-th configuration vector q_iter in the Q array.
 
@@ -66,8 +73,6 @@ def get_q_iter_from_Q(Q : np.ndarray, iter: int, nq: int):
         """
     q_iter = np.array((Q[nq * iter: nq * (iter+1)]))
     return q_iter
-
-
 
 def display_last_traj(Q: np.ndarray, T : int, dt = None):
     """Display the trajectory computed by the solver
@@ -86,6 +91,7 @@ def display_last_traj(Q: np.ndarray, T : int, dt = None):
         else:
             time.sleep(dt)
 
+# ### CASADI+IPOPT SOLVER
 class CasadiSolver:
     def __init__(self,QP):
         '''
@@ -107,9 +113,11 @@ class CasadiSolver:
 
         # HYPERPARAMS
         T = QP._T
-        k1 = QP._k1
-        k2 = QP._k2
-        q0 = QP._robot.q0
+        w_q0 = QP._weight_q0
+        w_dq = QP._weight_dq
+        w_term = QP._weight_term_pos
+        q0 = QP._q0
+        target = QP._target
 
         ### CASADI HELPERS
         cmodel = cpin.Model(QP._rmodel)
@@ -125,9 +133,9 @@ class CasadiSolver:
         self.var_qs = qs = [ opti.variable(QP._rmodel.nq) for model in range(T+1) ]
 
         residuals = \
-            [ k1*(qs[0]-q0) ] \
-            + [ k1*(qa-qb) for (qa,qb) in zip(qs[1:],qs[:-1]) ] \
-            + [ k2*(endeff(qs[-1])-QP._target) ]
+            [ w_q0*(qs[0]-q0) ] \
+            + [ w_dq*(qa-qb) for (qa,qb) in zip(qs[1:],qs[:-1]) ] \
+            + [ w_term*(endeff(qs[-1])-target) ]
         self.residuals = residuals = casadi.vertcat(*residuals)
 
         ### Optim
@@ -194,19 +202,22 @@ if __name__ == "__main__":
     # Open the viewer
     vis = create_visualizer(robot)
 
-    # Creating the QP 
-    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T, k1 = k1, k2 = k2)
-
     # Initial configuration
-    q0 = pin.randomConfiguration(rmodel)
-    #q0 = np.array([0, -2.5, 2, -1.2, -1.7, 0])
-    robot.q0 = q0
-    vis.display(q0)
+    if INITIAL_CONFIG == "random":
+        INITIAL_CONFIG = pin.randomConfiguration(rmodel)
+    vis.display(INITIAL_CONFIG)
+
+    # Creating the QP 
+    QP = QuadratricProblemNLP(robot, rmodel,
+                              q0 = INITIAL_CONFIG,
+                              target = TARGET,
+                              T = T,
+                              weight_q0 = WEIGHT_Q0,
+                              weight_dq = WEIGHT_DQ,
+                              weight_term_pos = WEIGHT_TERM_POS)
 
     # Initial trajectory 
-    Q0 = np.array(q0)
-    for i in range(T):
-        Q0 = np.concatenate((Q0, q0))
+    Q0 = np.concatenate([ INITIAL_CONFIG ]*(T+1) )
 
     # Trust region solver
     trust_region_solver = NewtonMethodMt(
