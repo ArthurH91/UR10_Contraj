@@ -82,8 +82,7 @@ class QuadratricProblemNLP():
         assert (self._EndeffID < len(self._rmodel.frames))
 
         # Storing the cartesian pose of the target
-        rmodel.frames[self._TargetID].translation = target
-
+        rmodel.frames[self._TargetID].placement.translation = target
 
     def _distance_endeff_target(self, q: np.ndarray):
         """Compute distance from a configuration q, from the end effector to the target. 
