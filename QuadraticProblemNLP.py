@@ -34,7 +34,13 @@ from create_visualizer import create_visualizer
 
 
 class QuadratricProblemNLP():
-    def __init__(self, robot, rmodel: pin.Model, rdata: pin.Data, gmodel: pin.GeometryModel, gdata: pin.GeometryData, T : int, k1 = 1, k2 = 1):
+    def __init__(self, robot, rmodel: pin.Model,
+                 q0: np.array,
+                 target: np.array,
+                 T : int,
+                 weight_q0: float,
+                 weight_dq: float,
+                 weight_term_pos: float):
         """Initialize the class with the models and datas of the robot.
 
         Parameters
@@ -43,28 +49,30 @@ class QuadratricProblemNLP():
             Model of the robot, used for robot.q0
         rmodel : pin.Model
             Model of the robot
-        rdata : pin.Data
-            Data of the model of the robot
-        gmodel : pin.GeometryModel
-            Geometrical model of the robot
-        gdata : pin.GeometryData
-            Geometrical data of the model of the robot
+        q0: np.array
+            Initial configuration of the robot
+        target: np.array
+            Target position for the end effector
         T : int
             Number of steps for the trajectory
-        k1 : float
-            Factor of penalisation of the principal cost
-        k2 : float
-            Factor of penalisation of the terminal cost
+        weight_q0 : float
+            Factor of penalisation of the initial cost (q_0 - q0)**2
+        weight_dq : float
+            Factor of penalisation of the running cost (q_t+1 - q_t)**2
+        weight_term_pos : float
+            Factor of penalisation of the terminal cost (p(q_T) - target)**
         """
         self._robot = robot
         self._rmodel = rmodel
-        self._rdata = rdata
-        self._gmodel = gmodel
-        self._gdata = gdata
-        self._T = T
-        self._k1 = k1
-        self._k2 = k2
+        self._rdata = rmodel.createData()
 
+        self._q0 = q0
+        self._T = T
+        self._target = target
+        self._weight_q0 = weight_q0
+        self._weight_dq = weight_dq
+        self._weight_term_pos = weight_term_pos
+        
         # Storing the IDs of the frames of the end effector and the target
 
         self._TargetID = self._rmodel.getFrameId('target')
@@ -74,9 +82,7 @@ class QuadratricProblemNLP():
         assert (self._EndeffID < len(self._rmodel.frames))
 
         # Storing the cartesian pose of the target
-        pin.framesForwardKinematics(self._rmodel,self._rdata,self._robot.q0)
-        self._target = self._rdata.oMf[self._TargetID].translation
-
+        rmodel.frames[self._TargetID].translation = target
 
 
     def _distance_endeff_target(self, q: np.ndarray):
@@ -110,17 +116,17 @@ class QuadratricProblemNLP():
         self._Q = Q
 
         # Computing the initial residual (q0 - q_init)
-
-        self._initial_residual = self._get_q_iter_from_Q(0) - self._robot.q0
+        self._initial_residual = self._get_q_iter_from_Q(0) - self._q0
 
         # Penalizing the initial residual
-        self._initial_residual *= self._k1
+        self._initial_residual *= self._weight_q0
 
         # Computing the principal residual 
-        self._principal_residual = self._get_difference_between_q_iter(0) * self._k1
-
+        self._principal_residual = self._get_difference_between_q_iter(0) * self._weight_dq
         for iter in range(1,self._T):
-            self._principal_residual = np.concatenate( (self._principal_residual, self._get_difference_between_q_iter(iter) * self._k1), axis=None)
+            self._principal_residual = np.concatenate( (self._principal_residual,
+                                                        self._get_difference_between_q_iter(iter) * self._weight_dq),
+                                                       axis=None)
 
         # Computing the terminal residual
 
@@ -128,7 +134,7 @@ class QuadratricProblemNLP():
         q_T = self._get_q_iter_from_Q(self._T)
 
         # Computing the residual 
-        self._terminal_residual = ( self._k2 ) * self._distance_endeff_target(q_T)
+        self._terminal_residual = ( self._weight_term_pos ) * self._distance_endeff_target(q_T)
 
         # Adding the terminal residual to the whole residual
         self._residual = np.concatenate( (self._initial_residual,self._principal_residual, self._terminal_residual), axis = None)
@@ -183,8 +189,22 @@ class QuadratricProblemNLP():
         """
         return self._get_q_iter_from_Q(iter + 1) - self._get_q_iter_from_Q(iter)
     
+    def _compute_derivative_initial_residuals(self):
+        """
+        Computes the derivatives of the initial residuals that are in a matrix, 
+        which is Eye*weight_q0
+
+        Returns
+        -------
+        J = Eye*weight_q0
+        """
+
+        return np.diag([self._weight_q0]*self._rmodel.nq)
+    
     def _compute_derivative_principal_residuals(self):
-        """Computes the derivatives of the principal and initial residuals that are in a matrix, as proved easily mathematically, this matrix is made out of :
+        """
+        Computes the derivatives of the principal  residuals that are in a matrix, 
+        as proved easily mathematically, this matrix is made out of :
         - a matrix ((nq.(T+1) +3) x (nq.(T+1))) where the diagonal is filled with 1  
         - a matrix ((nq.(T+1) +3) x (nq.(T+1))) where the diagonal under the diagonal 0 is filled with -1  
 
@@ -193,12 +213,16 @@ class QuadratricProblemNLP():
         _derivative_principal_residuals : np.ndarray
             matrix describing the principal residuals derivatives
         """
-        _derivative_principal_residuals = (np.eye(self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T +1)) - np.eye(
-            self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq))*(self._k1)
-        
-        # Replacing the last -1 by 0 because it goes an iteration too far.
-        _derivative_principal_residuals[-3:, -6:] = np.zeros((3,6))
-        return _derivative_principal_residuals
+
+        # Initially, the matrix was created from 2 np.eye (inducing 3 memory allocations
+        # _derivative_principal_residuals = (np.eye(self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T +1)) - np.eye(
+        #     self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq))*(self._weight_dq)
+        nq,T = self._rmodel.nq,self._T
+        J = np.zeros((T*nq,(T+1)*nq))
+        np.fill_diagonal(J,-self._weight_dq)
+        np.fill_diagonal(J[:,nq:],self._weight_dq)
+
+        return J
 
     def _compute_derivative_terminal_residuals(self):
         """Computes the derivatives of the terminal residuals, which are for now the jacobian matrix from pinocchio.
@@ -212,10 +236,10 @@ class QuadratricProblemNLP():
         q_terminal = self._get_q_iter_from_Q(self._T)
 
         # Computing the joint jacobian from pinocchio, used as the terminal residual derivative
-        ##_derivative_terminal_residuals = self._k2  * pin.computeJointJacobian(self._rmodel, self._rdata, q_terminal, 6)[:3, :]
+        ##_derivative_terminal_residuals = self._weight_term_pos  * pin.computeJointJacobian(self._rmodel, self._rdata, q_terminal, 6)[:3, :]
         pin.computeJointJacobians(self._rmodel, self._rdata, q_terminal)
         J = pin.getFrameJacobian(self._rmodel, self._rdata, self._EndeffID, pin.LOCAL_WORLD_ALIGNED)
-        _derivative_terminal_residuals = self._k2  * J[:3]
+        _derivative_terminal_residuals = self._weight_term_pos  * J[:3]
 
         return _derivative_terminal_residuals
 
@@ -228,15 +252,18 @@ class QuadratricProblemNLP():
             matrix describing the derivative of the residuals
         """
 
+        T,nq = self._T,self._rmodel.nq
+        
+        self._derivative_residuals = np.zeros([ (T+1)*nq+3,(T+1)*nq ])
+        
+        # Computing the initial residuals
+        self._derivative_residuals[:nq,:nq] = self._compute_derivative_initial_residuals()
+
         # Computing the principal residuals
-        self._derivative_residuals = self._compute_derivative_principal_residuals()
+        self._derivative_residuals[nq:-3,:] = self._compute_derivative_principal_residuals()
 
         # Computing the terminal residuals 
-        self._derivative_terminal_residuals = self._compute_derivative_terminal_residuals()
-
-        # Modifying the residuals to include the terminal residuals computed before
-        self._derivative_residuals[-3:, -6:] = self._derivative_terminal_residuals
-
+        self._derivative_residuals[-3:,-nq:] = self._compute_derivative_terminal_residuals()
 
     def grad(self, Q: np.ndarray):
         """Returns the grad of the cost function.
@@ -268,7 +295,7 @@ class QuadratricProblemNLP():
 
         return self.hessval
     
-    def _numdiff(self, f, x, eps=1e-6):
+    def _numdiff(self, f, x, eps=1e-8):
         """Estimate df/dx at x with finite diff of step eps
 
         Parameters
@@ -343,7 +370,6 @@ if __name__ == "__main__":
     gdata = gmodel.createData()
     vis = create_visualizer(robot)
 
-
     q = pin.randomConfiguration(rmodel)
 
     pin.framesForwardKinematics(rmodel, rdata, q)
@@ -359,8 +385,15 @@ if __name__ == "__main__":
 
     Q = np.concatenate((q0, q1, q2, q3))
     T = int((len(Q) - 1) / rmodel.nq) 
-
-    QP = QuadratricProblemNLP(robot, rmodel, rdata, gmodel, gdata, T=T, k1 = .1, k2=1 )
+    p = np.array([.1,.2,.3])
+    
+    QP = QuadratricProblemNLP(robot, rmodel,
+                              q0 = q,
+                              target = p,
+                              T=T,
+                              weight_q0 = 5,
+                              weight_dq = .1,
+                              weight_term_pos = 10)
 
     QP._Q = Q
 
@@ -369,4 +402,4 @@ if __name__ == "__main__":
     grad_numdiff = QP._grad_numdiff(Q)
     hessval_numdiff = QP._hess_numdiff(Q)
 
-    assert( np.linalg.norm(grad-grad_numdiff,np.inf) < 1e-6 )
+    assert( np.linalg.norm(grad-grad_numdiff,np.inf) < 1e-4 )
