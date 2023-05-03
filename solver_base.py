@@ -26,7 +26,7 @@
 
 import numpy as np
 
-class Solver:
+class SolverBase:
     def __init__(self, f, grad, hess=None, callback = None, alpha=0.5, alpha_max=10, beta=0.8, max_iter=1e3, eps=1e-6, ls_type="backtracking", step_type="l2_steepest", cond="Armijo", armijo_const=1e-4, wolfe_curvature_const=0.8, lin_solver=np.linalg.solve, bool_plot_results=False, verbose = False):
         """Initialize solver object with the cost function and its gradient, along with numerical and categorical parameters.
 
