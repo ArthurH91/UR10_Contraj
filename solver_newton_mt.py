@@ -25,10 +25,10 @@
 
 import numpy as np
 
-from Solver import Solver
+from solver_base import SolverBase
 
 
-class NewtonMethodMt(Solver):
+class SolverNewtonMt(SolverBase):
 
     def __init__(self, f, grad, hess, max_iter=1e3, callback=None, alpha_increase=1.2, alpha_decrease =0.5, regularization_increase =10, regularization_decrease=0.5, armijo_const =1e-2, beta = 1e-2, init_regu =1e-6, min_regu = 1e-9, alpha=1.0, verbose=True, lin_solver=np.linalg.solve, eps=1e-8, bool_plot_results = False):
         """ Initialize solver object with the cost function and its gradient, along with numerical and categorical parameters.
