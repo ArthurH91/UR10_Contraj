@@ -74,7 +74,7 @@ def display_last_traj(vis, Q: np.ndarray, q0: np.ndarray, T: int, dt=None):
             time.sleep(dt)
 
 
-def numdiff(self, f, x, eps=1e-8):
+def numdiff(f, x, eps=1e-8):
     """Estimate df/dx at x with finite diff of step eps
 
     Parameters
