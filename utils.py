@@ -101,7 +101,7 @@ def numdiff(self, f, x, eps=1e-8):
     return np.array(res).T
 
 
-def generateReachableTarget(rmodel, rdata=None, frameName="endeff"):
+def generate_reachable_target(rmodel, rdata=None, frameName="endeff"):
     """
     Sample a random configuration, then returns the forward kinematics
     for this configuration rdata.oMf[frameId].
@@ -128,6 +128,6 @@ if __name__ == "__main__":
     import example_robot_data as robex
 
     robot = robex.load("ur10")
-    p = generateReachableTarget(robot.model, robot.data, "tool0")
+    p = generate_reachable_target(robot.model, robot.data, "tool0")
 
     assert np.all(np.isfinite(p.translation))
