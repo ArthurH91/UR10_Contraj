@@ -2,6 +2,7 @@ import hppfcl
 import pinocchio as pin
 import numpy as np    
 import time
+import copy
 
 def get_transform(T_: hppfcl.Transform3f):
     T = np.eye(4)
@@ -69,6 +70,32 @@ def display_last_traj(vis, Q: np.ndarray, q0: np.ndarray, T : int, dt = None):
         else:
             time.sleep(dt)
 
+
+def numdiff(self, f, x, eps=1e-8):
+    """Estimate df/dx at x with finite diff of step eps
+
+    Parameters
+    ----------
+    f : function handle
+        Function evaluated for the finite differente of its gradient.
+    x : np.ndarray
+        Array at which the finite difference is calculated
+    eps : float, optional
+        Finite difference step, by default 1e-6
+
+    Returns
+    -------
+    jacobian : np.ndarray
+        Finite difference of the function f at x.
+    """
+    xc = np.copy(x)
+    f0 = np.copy(f(x))
+    res = []
+    for i in range(len(x)):
+        xc[i] += eps
+        res.append(copy.copy(f(xc)-f0)/eps)
+        xc[i] = x[i]
+    return np.array(res).T
 
 
     

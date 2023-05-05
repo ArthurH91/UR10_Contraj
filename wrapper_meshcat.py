@@ -141,7 +141,7 @@ class MeshcatWrapper():
 if __name__ == "__main__":
 
     from generate_reachable_target import generateReachableTarget
-    from robot_wrapper import RobotWrapper
+    from wrapper_robot import RobotWrapper
 
     # Generating the robot 
     robot_wrapper = RobotWrapper()

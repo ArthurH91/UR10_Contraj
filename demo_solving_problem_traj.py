@@ -30,11 +30,11 @@ import time
 from scipy.optimize import fmin,fmin_bfgs
 import matplotlib.pyplot as plt
 
-from robot_wrapper import RobotWrapper
+from wrapper_robot import RobotWrapper
 from meshcat_wrapper import MeshcatWrapper
 from problem_traj import QuadratricProblemNLP
 from solver_newton_mt import SolverNewtonMt
-from dedicated_solver_casadi import CasadiSolver
+from solver_casadi import CasadiSolver
 from generate_reachable_target import generateReachableTarget
 from utils import display_last_traj
 

@@ -27,7 +27,7 @@ import numpy as np
 import pinocchio as pin
 import copy
 
-from robot_wrapper import RobotWrapper
+from wrapper_robot import RobotWrapper
 from utils import get_q_iter_from_Q, get_difference_between_q_iter
 
 # This class is for defining the optimization problem and computing the cost function, its gradient and hessian.
@@ -193,9 +193,8 @@ class QuadratricProblemNLP():
         return self.gradval
 
     
-
     def hess(self, Q : np.ndarray):
-        """Returns the hessian of the cost function.
+        """Returns the hessian of the cost function with regards to the gauss newton approximation
         """
         self._Q = Q
         self.cost(self._Q)
@@ -204,70 +203,6 @@ class QuadratricProblemNLP():
 
         return self.hessval
     
-    def _numdiff(self, f, x, eps=1e-8):
-        """Estimate df/dx at x with finite diff of step eps
-
-        Parameters
-        ----------
-        f : function handle
-            Function evaluated for the finite differente of its gradient.
-        x : np.ndarray
-            Array at which the finite difference is calculated
-        eps : float, optional
-            Finite difference step, by default 1e-6
-
-        Returns
-        -------
-        jacobian : np.ndarray
-            Finite difference of the function f at x.
-        """
-        xc = np.copy(x)
-        f0 = np.copy(f(x))
-        res = []
-        for i in range(len(x)):
-            xc[i] += eps
-            res.append(copy.copy(f(xc)-f0)/eps)
-            xc[i] = x[i]
-        return np.array(res).T
-    
-
-    def _grad_numdiff(self, Q:np.ndarray):
-        """Computing the gradient of the cost with the finite difference method
-
-        Parameters
-        ----------
-        Q : np.ndarray
-            Array of shape (T*rmodel.nq) in which all the configurations of the robot are, in a single column.
-
-        Returns
-        -------
-        _num_diff_hessval : np.ndarray
-            Gradient computed with finite difference method
-        """
-
-        self._derivative_residuals_num_diff = self._numdiff(self.compute_residuals, Q)
-
-        self._num_diff_gradval = self._numdiff(self.compute_cost, Q)
-
-        return self._num_diff_gradval
-    
-    def _hess_numdiff(self, Q: np.ndarray):
-        """Computing the hessian value of the cost with the finite difference method
-
-        Parameters
-        ----------
-        Q : np.ndarray
-            Array of shape (T*rmodel.nq) in which all the configurations of the robot are, in a single column.
-
-
-        Returns
-        -------
-        _num_diff_hessval : np.ndarray
-            Hessian computed with finite difference method
-        """
-
-        self._num_diff_hessval = self._numdiff(self._grad_numdiff, Q)
-        return self._num_diff_hessval
     
 
 if __name__ == "__main__":
@@ -304,7 +239,7 @@ if __name__ == "__main__":
 
     QP._Q = Q
 
-    cost = QP.compute_cost(Q)
+    cost = QP.cost(Q)
     grad = QP.grad(Q)
     grad_numdiff = QP._grad_numdiff(Q)
     hessval_numdiff = QP._hess_numdiff(Q)

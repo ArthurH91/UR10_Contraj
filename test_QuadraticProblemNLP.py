@@ -5,7 +5,7 @@ import pinocchio as pin
 import copy
 
 from problem_traj import QuadratricProblemNLP
-from robot_wrapper import RobotWrapper
+from wrapper_robot import RobotWrapper
 
 np.set_printoptions(precision=3, linewidth=300, suppress=True, threshold=10000)
 
