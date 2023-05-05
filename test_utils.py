@@ -50,10 +50,19 @@ class TestUtils(unittest.TestCase):
     def test_generate_reachable_target(self):
         """Testing the function generate_reachable_target by making sure it returns a finite array.
         """
-        import example_robot_data as robex
-        robot = robex.load("ur10")
-        p = generate_reachable_target(robot.model, robot.data, "tool0")
+        from wrapper_robot import RobotWrapper
+        robot_wrapper = RobotWrapper()
+        robot, rmodel, gmodel = robot_wrapper()
+        rdata = rmodel.createData()
+
+        p, q = generate_reachable_target(rmodel, rdata, "tool0", returnConfiguration=True)
+        pin.framesForwardKinematics(rmodel, rdata, q)
+
+        p_endeff = rdata.oMf[-1].translation
+        dist_endeff_target = p_endeff - p.translation
+
         self.assertTrue(np.all(np.isfinite(p.translation)))
+        self.assertTrue(np.isclose(np.linalg.norm(dist_endeff_target), 0, atol=1e-5))
 
 if __name__ == "__main__":
     unittest.main()
