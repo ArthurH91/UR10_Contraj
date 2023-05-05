@@ -106,13 +106,13 @@ if __name__ == "__main__":
     if INITIAL_CONFIG == "random":
         INITIAL_CONFIG = pin.randomConfiguration(rmodel)
     if TARGET == "random":
-        TARGET = generateReachableTarget(rmodel,rdata).translation
+        TARGET = generateReachableTarget(rmodel,rdata)
 
         
     # Creating the QP 
     QP = QuadratricProblemNLP(robot, rmodel,
                               q0 = INITIAL_CONFIG,
-                              target = TARGET,
+                              target = TARGET.translation,
                               T = T,
                               weight_q0 = WEIGHT_Q0,
                               weight_dq = WEIGHT_DQ,
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     
     # Generating the meshcat visualizer
     MeshcatVis = MeshcatWrapper()
-    vis = MeshcatVis.visualize(p, robot=robot)
+    vis = MeshcatVis.visualize(TARGET, robot=robot)
 
     # Displaying the initial configuration of the robot
     vis.display(INITIAL_CONFIG)
