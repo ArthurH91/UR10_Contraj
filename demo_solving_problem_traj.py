@@ -31,7 +31,7 @@ from scipy.optimize import fmin,fmin_bfgs
 import matplotlib.pyplot as plt
 
 from robot_wrapper import RobotWrapper
-from create_visualizer import create_visualizer
+from meshcat_wrapper import MeshcatWrapper
 from problem_traj import QuadratricProblemNLP
 from solver_newton_mt import SolverNewtonMt
 from dedicated_solver_casadi import CasadiSolver
@@ -57,7 +57,7 @@ print(f'SEED = {SEED}' )
 WITH_DISPLAY = False
 WITH_PLOT = False
 WITH_NUMDIFF_SOLVE = False
-WARMSTART_IPOPT_WITH_TRS = True
+WARMSTART_IPOPT_WITH_TRS = False
 
 # ### HELPERS
 def get_q_iter_from_Q(Q : np.ndarray, iter: int, nq: int):
@@ -98,7 +98,7 @@ if __name__ == "__main__":
 
     # Creation of the robot
     robot_wrapper = RobotWrapper()
-    robot, rmodel, gmodel = robot_wrapper(target=True)
+    robot, rmodel, gmodel = robot_wrapper()
     rdata = rmodel.createData()
     gdata = gmodel.createData()
 
@@ -117,9 +117,12 @@ if __name__ == "__main__":
                               weight_q0 = WEIGHT_Q0,
                               weight_dq = WEIGHT_DQ,
                               weight_term_pos = WEIGHT_TERM_POS)
+    
+    # Generating the meshcat visualizer
+    MeshcatVis = MeshcatWrapper()
+    vis = MeshcatVis.visualize(p, robot=robot)
 
-    # Open the viewer
-    vis = create_visualizer(robot)
+    # Displaying the initial configuration of the robot
     vis.display(INITIAL_CONFIG)
 
     # Initial trajectory 
@@ -141,7 +144,7 @@ if __name__ == "__main__":
         Q_fmin = mini
 
         # Trust region solver with finite difference
-        trust_region_solver_nd = NewtonMethodMt(
+        trust_region_solver_nd = SolverNewtonMt(
             QP.compute_cost, QP._grad_numdiff, QP._hess_numdiff, max_iter=100, callback=None)
         res = trust_region_solver_nd(Q0)
         list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = trust_region_solver_nd._fval_history, trust_region_solver_nd._gradfval_history, trust_region_solver_nd._alphak_history, trust_region_solver_nd._reguk_history

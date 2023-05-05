@@ -4,8 +4,8 @@ import numpy as np
 import pinocchio as pin
 import copy
 
-from QuadraticProblemNLP import QuadratricProblemNLP
-from RobotWrapper import RobotWrapper
+from problem_traj import QuadratricProblemNLP
+from robot_wrapper import RobotWrapper
 
 np.set_printoptions(precision=3, linewidth=300, suppress=True, threshold=10000)
 

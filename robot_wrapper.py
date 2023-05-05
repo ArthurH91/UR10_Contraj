@@ -27,7 +27,6 @@
 import numpy as np
 import pinocchio as pin
 import example_robot_data as robex
-from create_visualizer import create_visualizer
 import hppfcl
 
 # This class is for unwrapping an URDF and converting it to a model. It is also possible to add objects in the model,
@@ -50,7 +49,7 @@ class RobotWrapper():
         self._rmodel = self._robot.model
         self._color = np.array([249, 136, 126, 255]) / 255
 
-    def __call__(self, target=False):
+    def __call__(self):
         """Create a robot with a new frame at the end effector position and place a hppfcl: ShapeBase cylinder at this position.
 
         Parameters
@@ -102,49 +101,22 @@ class RobotWrapper():
         # Add the geometry object to the geometrical model
         self._gmodel.addGeometryObject(geom_endeff)
 
-        if target:
-            self._create_target()
-
         return self._robot, self._rmodel, self._gmodel
 
-    def _create_target(self):
-        """ Updates the version of the robot models with a sphere that can be used as a target.
-
-        Returns
-        -------
-        _robot
-            Robot description of the said robot
-        _rmodel
-            Model of the robot
-        _gmodel 
-            Geometrical model of the robot
-        """
-
-        # Setup of the shape of the target (a sphere here)
-        r_target = 5e-2*self._scale
-
-        # Creation of the target
-
-        # Creating the frame of the target
-
-        # Previously, was carefully selected at robot creation time
-        # Avoid to concentrate all hyperparams at the same place
-        # self._M_target = self._generate_reachable_SE3_vector()
-        self._M_target = pin.SE3.Identity()
-
-        target_frame = pin.Frame("target", self._rmodel.getJointId(
-            "universe"), self._M_target, pin.BODY)
-        target = self._rmodel.addFrame(target_frame, False)
-        T_target = self._rmodel.frames[target].placement
-        target_shape = hppfcl.Sphere(r_target)
-        geom_target = pin.GeometryObject("target_geom", self._rmodel.getJointId(
-            "universe"), T_target, target_shape)
-
-        geom_target.meshColor = self._color
-        self._gmodel.addGeometryObject(geom_target)
 
 if __name__ == "__main__":
 
+    from meshcat_wrapper import MeshcatWrapper
+    from generate_reachable_target import generateReachableTarget
+
+    # Generating the robot 
     robot_wrapper = RobotWrapper()
-    robot, rmodel, gmodel = robot_wrapper(target=True)
-    vis = create_visualizer(robot)
+    robot, rmodel, gmodel = robot_wrapper()
+    rdata = rmodel.createData()
+
+    # Generate a reachable target
+    p = generateReachableTarget(rmodel, rdata, "tool0")
+
+    # Generating the meshcat visualizer
+    MeshcatVis = MeshcatWrapper()
+    vis = MeshcatVis.visualize(p, robot=robot)
