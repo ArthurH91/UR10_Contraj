@@ -31,12 +31,11 @@ from scipy.optimize import fmin,fmin_bfgs
 import matplotlib.pyplot as plt
 
 from wrapper_robot import RobotWrapper
-from meshcat_wrapper import MeshcatWrapper
+from wrapper_meshcat import MeshcatWrapper
 from problem_traj import QuadratricProblemNLP
 from solver_newton_mt import SolverNewtonMt
 from solver_casadi import CasadiSolver
-from generate_reachable_target import generateReachableTarget
-from utils import display_last_traj
+from utils import display_last_traj, generateReachableTarget
 
 # ### HYPERPARMS
 T = 6
