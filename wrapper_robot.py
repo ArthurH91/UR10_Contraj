@@ -32,7 +32,8 @@ import hppfcl
 # This class is for unwrapping an URDF and converting it to a model. It is also possible to add objects in the model,
 # such as a ball at a specific position.
 
-class RobotWrapper():
+
+class RobotWrapper:
     def __init__(self, scale=1.0, name_robot="ur10"):
         """Initialize the wrapper with a scaling number of the target and the name of the robot wanted to get unwrapped.
 
@@ -74,7 +75,7 @@ class RobotWrapper():
         # The cylinder is used to have a HPPFCL shape at the end of the robot to make contact with the target
 
         # Obtaining the frame ID of the frame tool0
-        ID_frame_tool0 = self._rmodel.getFrameId('tool0')
+        ID_frame_tool0 = self._rmodel.getFrameId("tool0")
         # Obtaining the frame tool0
         frame_tool0 = self._rmodel.frames[ID_frame_tool0]
         # Obtaining the parent joint of the frame tool0
@@ -96,7 +97,8 @@ class RobotWrapper():
         endeff_shape = hppfcl.Cylinder(endeff_radii, endeff_width)
         # Creating a pin.GeometryObject for the model of the _robot
         geom_endeff = pin.GeometryObject(
-            "endeff_geom", parent_joint, Mf_endeff, endeff_shape)
+            "endeff_geom", parent_joint, Mf_endeff, endeff_shape
+        )
         geom_endeff.meshColor = self._color
         # Add the geometry object to the geometrical model
         self._gmodel.addGeometryObject(geom_endeff)
@@ -105,11 +107,10 @@ class RobotWrapper():
 
 
 if __name__ == "__main__":
-
     from wrapper_meshcat import MeshcatWrapper
     from utils import generateReachableTarget
 
-    # Generating the robot 
+    # Generating the robot
     robot_wrapper = RobotWrapper()
     robot, rmodel, gmodel = robot_wrapper()
     rdata = rmodel.createData()

@@ -29,9 +29,28 @@ from solver_base import SolverBase
 
 
 class SolverNewtonMt(SolverBase):
-
-    def __init__(self, f, grad, hess, max_iter=1e3, callback=None, alpha_increase=1.2, alpha_decrease =0.5, regularization_increase =10, regularization_decrease=0.5, armijo_const =1e-2, beta = 1e-2, init_regu =1e-6, min_regu = 1e-9, alpha=1.0, verbose=True, lin_solver=np.linalg.solve, eps=1e-8, bool_plot_results = False):
-        """ Initialize solver object with the cost function and its gradient, along with numerical and categorical parameters.
+    def __init__(
+        self,
+        f,
+        grad,
+        hess,
+        max_iter=1e3,
+        callback=None,
+        alpha_increase=1.2,
+        alpha_decrease=0.5,
+        regularization_increase=10,
+        regularization_decrease=0.5,
+        armijo_const=1e-2,
+        beta=1e-2,
+        init_regu=1e-6,
+        min_regu=1e-9,
+        alpha=1.0,
+        verbose=True,
+        lin_solver=np.linalg.solve,
+        eps=1e-8,
+        bool_plot_results=False,
+    ):
+        """Initialize solver object with the cost function and its gradient, along with numerical and categorical parameters.
 
 
         Parameters
@@ -84,7 +103,7 @@ class SolverNewtonMt(SolverBase):
         self._regularization_decrease = regularization_decrease
         self._regularization_increase = regularization_increase
         self._armijo_const = armijo_const
-        self._beta = beta 
+        self._beta = beta
         self._init_regu = init_regu
         self._min_regu = min_regu
         self._alpha = alpha
@@ -93,9 +112,8 @@ class SolverNewtonMt(SolverBase):
         self._eps = eps
         self._bool_plot_results = bool_plot_results
 
-
-    def __call__(self, x0 : np.ndarray):
-        """ Performs a trust-region optimization algorithm on the function f.
+    def __call__(self, x0: np.ndarray):
+        """Performs a trust-region optimization algorithm on the function f.
 
 
         Parameters
@@ -113,8 +131,8 @@ class SolverNewtonMt(SolverBase):
             final gradient value
         """
 
-        # Initialization of the step size 
-        self._alpha_k = self._alpha 
+        # Initialization of the step size
+        self._alpha_k = self._alpha
 
         # Initialization of the damping
         self._regu_k = self._init_regu
@@ -134,7 +152,7 @@ class SolverNewtonMt(SolverBase):
         # Create a list for the values of step size
         self._alphak_history = []
 
-        # Create a list for the values of the regularization 
+        # Create a list for the values of the regularization
         self._reguk_history = []
 
         # Printing a small explanation of the algorithm
@@ -146,16 +164,14 @@ class SolverNewtonMt(SolverBase):
 
         # Start
         while True:
-            
             # Cost of the step
             self._fval_k = self._f(self._xval_k)
-            # Gradient of the cost function 
+            # Gradient of the cost function
             self._gradfval_k = self._grad(self._xval_k)
-            # Norm of the gradient function 
+            # Norm of the gradient function
             self._norm_gradfval_k = np.linalg.norm(self._gradfval_k)
             # Hessian of the cost function
             self._hessval_k = self._hess(self._xval_k)
-
 
             if self._verbose:
                 # Print current iterate
@@ -168,19 +184,16 @@ class SolverNewtonMt(SolverBase):
             if self._convergence_condition() or self._exceeded_maximum_iterations():
                 break
 
-
             # Linesearch
             self._Ls_bool = False
             while not self._Ls_bool:
-
                 # Computing search direction
                 self._search_dir_k = self._compute_search_direction()
 
-                # Computing directionnal derivative   
+                # Computing directionnal derivative
                 self._dir_deriv_k = self._compute_current_directional_derivative()
 
-
-                # Linesearch, if the step is accepted Ls_bool = True and the alpha_k is kept. If it's not, the search direction is 
+                # Linesearch, if the step is accepted Ls_bool = True and the alpha_k is kept. If it's not, the search direction is
                 # computed once again with an increase in the damping.
                 self._alpha_k = self._backtracking()
 
@@ -190,9 +203,9 @@ class SolverNewtonMt(SolverBase):
 
             # Computing next step
             self._xval_k = self._compute_next_step()
-            
+
             # Increasing step size (according to Marc Toussaint)
-            self._alpha_k = min(self._alpha_increase* self._alpha_k, 1)
+            self._alpha_k = min(self._alpha_increase * self._alpha_k, 1)
 
             # Updating the trust-region
             if self._alpha_k == 1 and self._regu_k > self._min_regu:
@@ -204,7 +217,7 @@ class SolverNewtonMt(SolverBase):
             # Adding the cost function value to the list
             self._fval_history.append(self._fval_k)
 
-            # Adding the step size to the list 
+            # Adding the step size to the list
             self._alphak_history.append(self._alpha_k)
 
             # Adding the value of the norm of the gradient to the list
@@ -213,7 +226,7 @@ class SolverNewtonMt(SolverBase):
             # Adding the value of the regularization to the list
             self._reguk_history.append(self._regu_k)
 
-        # Printing outputs 
+        # Printing outputs
         self._print_output()
 
         # Plotting outputs
@@ -221,7 +234,6 @@ class SolverNewtonMt(SolverBase):
             self._plot_variables()
 
         return self._xval_k, self._fval_k, self._gradfval_k
-
 
     def _backtracking(self):
         """Calculates a step using backtracking.
@@ -248,7 +260,6 @@ class SolverNewtonMt(SolverBase):
         # Return
         self._Ls_bool = True
         return alpha
-    
 
     def _compute_search_direction(self):
         """Computes the search direction for trust-region.
@@ -258,18 +269,19 @@ class SolverNewtonMt(SolverBase):
         search_dir_k : np.ndarray
             search direction for trust region
         """
-        return self._lin_solver(self._hessval_k + self._regu_k * np.eye(len(self._gradfval_k)), - self._gradfval_k)
-    
+        return self._lin_solver(
+            self._hessval_k + self._regu_k * np.eye(len(self._gradfval_k)),
+            -self._gradfval_k,
+        )
 
     def _print_start(self):
         print("Start of the Newton method of Marc Toussaint")
 
-
     def _plot_variables(self):
-        """Plotting the outputs, which are the values of the cost function, the gradient, the alphas and the regularization term through the iterations
-        """
+        """Plotting the outputs, which are the values of the cost function, the gradient, the alphas and the regularization term through the iterations"""
         try:
             import matplotlib.pyplot as plt
+
             plt.subplot(411)
             plt.plot(self._fval_history, "-ob", label="Marc Toussaint's method")
             plt.yscale("log")
@@ -283,7 +295,7 @@ class SolverNewtonMt(SolverBase):
             plt.legend()
 
             plt.subplot(413)
-            plt.plot(self._alphak_history,  "-ob", label="Marc Toussaint's method")
+            plt.plot(self._alphak_history, "-ob", label="Marc Toussaint's method")
             plt.yscale("log")
             plt.ylabel("Alpha")
             plt.legend()
@@ -295,12 +307,10 @@ class SolverNewtonMt(SolverBase):
             plt.xlabel("Iterations")
             plt.legend()
 
-            plt.suptitle(
-                "Trust-region method from Marc Toussaint ")
+            plt.suptitle("Trust-region method from Marc Toussaint ")
             plt.show()
         except:
-            print("No module named matplotlib.pyplot") 
-
+            print("No module named matplotlib.pyplot")
 
     def _print_output(self):
         """Prints the final message of the search.
@@ -310,22 +320,25 @@ class SolverNewtonMt(SolverBase):
             self._fval_k (float): Function value at current iterate.
             self._norm_gradfval_k (float): Gradient norm value at current iterate.
         """
-    # If the algorithm converged
+        # If the algorithm converged
         if self._convergence_condition():
             print()
-            print( "Marc Toussaint's descent successfully converged in %d iterations." %
-                    self._iter_cnter)
+            print(
+                "Marc Toussaint's descent successfully converged in %d iterations."
+                % self._iter_cnter
+            )
             print("Optimal function value: %.4e." % self._fval_k)
             print("Optimality conditions : %.4e." % self._norm_gradfval_k)
 
         # If the algorithm exceeded the iterations
         if self._exceeded_maximum_iterations():
             print()
-            print("Marc Toussaint's descent exceeded the maximum number (%d) of iterations." % self._max_iter)
+            print(
+                "Marc Toussaint's descent exceeded the maximum number (%d) of iterations."
+                % self._max_iter
+            )
             print("Current function value: %.4e." % self._fval_k)
-            print("Current optimality conditions : %.4e." %
-                    self._norm_gradfval_k)
-
+            print("Current optimality conditions : %.4e." % self._norm_gradfval_k)
 
 
 if __name__ == "__main__":

@@ -8,11 +8,10 @@ import meshcat.transformations as tf
 from utils import get_transform
 
 
+class MeshcatWrapper:
+    """Wrapper displaying a robot and a target in a meshcat server."""
 
-class MeshcatWrapper():
-    """Wrapper displaying a robot and a target in a meshcat server.
-    """
-    def __init__(self, grid = False, axes = False):
+    def __init__(self, grid=False, axes=False):
         """Wrapper displaying a robot and a target in a meshcat server.
 
         Parameters
@@ -26,8 +25,7 @@ class MeshcatWrapper():
         self._grid = grid
         self._axes = axes
 
-
-    def visualize(self, TARGET : pin.SE3, RADII_TARGET = 5e-2, robot = None):
+    def visualize(self, TARGET: pin.SE3, RADII_TARGET=5e-2, robot=None):
         """Returns the visualiser, displaying the robot and the target if they are in input.
 
         Parameters
@@ -46,7 +44,7 @@ class MeshcatWrapper():
         """
         if robot is not None:
             self._robot = robot
-            self._TARGET = TARGET 
+            self._TARGET = TARGET
             self._RADII_TARGET = RADII_TARGET
 
             # Creating the models of the robot
@@ -54,24 +52,23 @@ class MeshcatWrapper():
             self._rcmodel = self._robot.collision_model
             self.rvmodel = self._robot.visual_model
 
-        # Creation of the visualizer, 
+        # Creation of the visualizer,
         self.viewer = self.create_visualizer()
-
 
         if self._TARGET is not None:
             # Creating the target, which is here a hppfclSphere
             self._renderSphere("target")
 
-
         Viewer = pin.visualize.MeshcatVisualizer
 
         if robot is not None:
             self.viewer = Viewer(robot.model, robot.collision_model, robot.visual_model)
-        self.viewer.initViewer(viewer=meshcat.Visualizer(zmq_url="tcp://127.0.0.1:6000"))
+        self.viewer.initViewer(
+            viewer=meshcat.Visualizer(zmq_url="tcp://127.0.0.1:6000")
+        )
         self.viewer.loadViewerModel()
 
         return self.viewer
-
 
     def create_visualizer(self):
         """Creation of an empty visualizer.
@@ -88,9 +85,8 @@ class MeshcatWrapper():
         if not self._axes:
             self.viewer["/Axes"].set_property("visible", False)
         return self.viewer
-    
 
-    def _renderSphere(self, e_name: str, color=np.array([1., 1., 1., 1.])):
+    def _renderSphere(self, e_name: str, color=np.array([1.0, 1.0, 1.0, 1.0])):
         """Displaying a sphere in a meshcat server.
 
         Parameters
@@ -101,14 +97,15 @@ class MeshcatWrapper():
             array describing the color of the target, by default np.array([1., 1., 1., 1.]) (ie white)
         """
         # Setting the object in the viewer
-        self.viewer[e_name].set_object(g.Sphere(self._RADII_TARGET), self._meshcat_material(*color))
+        self.viewer[e_name].set_object(
+            g.Sphere(self._RADII_TARGET), self._meshcat_material(*color)
+        )
 
         # Obtaining its position in the right format
         T = get_transform(self._TARGET)
 
         # Applying the transformation to the object
         self.viewer[e_name].set_transform(T)
-
 
     def _meshcat_material(self, r, g, b, a):
         """Converting RGBA color to meshcat material.
@@ -130,20 +127,16 @@ class MeshcatWrapper():
             material for meshcat
         """
         material = meshcat.geometry.MeshPhongMaterial()
-        material.color = int(r * 255) * 256 ** 2 + int(g * 255) * 256 + \
-            int(b * 255)
+        material.color = int(r * 255) * 256**2 + int(g * 255) * 256 + int(b * 255)
         material.opacity = a
         return material
 
 
-
-
 if __name__ == "__main__":
-
     from utils import generateReachableTarget
     from wrapper_robot import RobotWrapper
 
-    # Generating the robot 
+    # Generating the robot
     robot_wrapper = RobotWrapper()
     robot, rmodel, gmodel = robot_wrapper()
     rdata = rmodel.createData()

@@ -33,14 +33,18 @@ from utils import get_q_iter_from_Q, get_difference_between_q_iter
 # This class is for defining the optimization problem and computing the cost function, its gradient and hessian.
 
 
-class QuadratricProblemNLP():
-    def __init__(self, robot, rmodel: pin.Model,
-                 q0: np.array,
-                 target: np.array,
-                 T : int,
-                 weight_q0: float,
-                 weight_dq: float,
-                 weight_term_pos: float):
+class QuadratricProblemNLP:
+    def __init__(
+        self,
+        robot,
+        rmodel: pin.Model,
+        q0: np.array,
+        target: np.array,
+        T: int,
+        weight_q0: float,
+        weight_dq: float,
+        weight_term_pos: float,
+    ):
         """Initialize the class with the models and datas of the robot.
 
         Parameters
@@ -72,12 +76,11 @@ class QuadratricProblemNLP():
         self._weight_q0 = weight_q0
         self._weight_dq = weight_dq
         self._weight_term_pos = weight_term_pos
-        
+
         # Storing the IDs of the frame of the end effector
 
-        self._EndeffID = self._rmodel.getFrameId('endeff')
-        assert (self._EndeffID < len(self._rmodel.frames))
-
+        self._EndeffID = self._rmodel.getFrameId("endeff")
+        assert self._EndeffID < len(self._rmodel.frames)
 
     def cost(self, Q: np.ndarray):
         """Computes the cost of the QP.
@@ -90,32 +93,41 @@ class QuadratricProblemNLP():
         Returns
         -------
         self._cost : float
-            Sum of the costs 
+            Sum of the costs
         """
 
         self._Q = Q
 
-        ### INITIAL RESIDUAL 
+        ### INITIAL RESIDUAL
         ### Computing the distance between q0 and q_init to make sure the robot starts at the right place
-        self._initial_residual = get_q_iter_from_Q(self._Q, 0, self._rmodel.nq) - self._q0
+        self._initial_residual = (
+            get_q_iter_from_Q(self._Q, 0, self._rmodel.nq) - self._q0
+        )
 
         # Penalizing the initial residual
         self._initial_residual *= self._weight_q0
 
-
-        ### RUNNING RESIDUAL 
+        ### RUNNING RESIDUAL
         ### Running residuals are computed by diffenciating between q_th and q_th +1
-        self._principal_residual = get_difference_between_q_iter(Q, 0, self._rmodel.nq) * self._weight_dq
-        for iter in range(1,self._T):
-            self._principal_residual = np.concatenate((self._principal_residual, get_difference_between_q_iter(Q, iter, self._rmodel.nq) * self._weight_dq),axis=None)
+        self._principal_residual = (
+            get_difference_between_q_iter(Q, 0, self._rmodel.nq) * self._weight_dq
+        )
+        for iter in range(1, self._T):
+            self._principal_residual = np.concatenate(
+                (
+                    self._principal_residual,
+                    get_difference_between_q_iter(Q, iter, self._rmodel.nq)
+                    * self._weight_dq,
+                ),
+                axis=None,
+            )
 
-
-        ### TERMINAL RESIDUAL 
-        ### Computing the distance between the last configuration and the target 
+        ### TERMINAL RESIDUAL
+        ### Computing the distance between the last configuration and the target
 
         # Obtaining the last configuration of Q
         q_last = get_q_iter_from_Q(self._Q, self._T, self._rmodel.nq)
-        
+
         # Forward kinematics of the robot at the configuration q.
         pin.framesForwardKinematics(self._rmodel, self._rdata, q_last)
 
@@ -125,20 +137,23 @@ class QuadratricProblemNLP():
         # Comuting the distance between the target and the end effector
         dist_endeff_target = p_endeff - self._target
 
-        self._terminal_residual = ( self._weight_term_pos ) * dist_endeff_target
+        self._terminal_residual = (self._weight_term_pos) * dist_endeff_target
 
         ### TOTAL RESIDUAL
-        self._residual = np.concatenate( (self._initial_residual,self._principal_residual, self._terminal_residual), axis = None)
+        self._residual = np.concatenate(
+            (self._initial_residual, self._principal_residual, self._terminal_residual),
+            axis=None,
+        )
 
-        ### COMPUTING COSTS 
-        self._initial_cost = 0.5 * sum(self._initial_residual ** 2)
-        self._principal_cost = 0.5 * sum(self._principal_residual ** 2)
-        self._terminal_cost = 0.5 * sum(self._terminal_residual ** 2)
+        ### COMPUTING COSTS
+        self._initial_cost = 0.5 * sum(self._initial_residual**2)
+        self._principal_cost = 0.5 * sum(self._principal_residual**2)
+        self._terminal_cost = 0.5 * sum(self._terminal_residual**2)
         self.costval = self._initial_cost + self._terminal_cost + self._principal_cost
 
         return self.costval
 
-    def grad(self, Q:np.ndarray):
+    def grad(self, Q: np.ndarray):
         """Returns the grad of the cost function.
 
         Parameters
@@ -151,63 +166,69 @@ class QuadratricProblemNLP():
         gradient : np.ndarray
             Array of shape (T*rmodel.nq + 3) in which the values of the gradient of the cost function are computed.
         """
-        
-        ### COST AND RESIDUALS 
+
+        ### COST AND RESIDUALS
         self.cost(Q)
 
         ### DERIVATIVES OF THE RESIDUALS
 
         # Computing the derivative of the initial residuals
-        self._derivative_initial_residual = np.diag([self._weight_q0]*self._rmodel.nq)
+        self._derivative_initial_residual = np.diag([self._weight_q0] * self._rmodel.nq)
 
         # Computing the derivative of the principal residual
-        nq,T = self._rmodel.nq,self._T
-        J = np.zeros((T*nq,(T+1)*nq))
-        np.fill_diagonal(J,-self._weight_dq)
-        np.fill_diagonal(J[:,nq:],self._weight_dq)
+        nq, T = self._rmodel.nq, self._T
+        J = np.zeros((T * nq, (T + 1) * nq))
+        np.fill_diagonal(J, -self._weight_dq)
+        np.fill_diagonal(J[:, nq:], self._weight_dq)
 
         self._derivative_principal_residual = J
 
         # Computing the derivative of the terminal residual
-        q_terminal = get_q_iter_from_Q(self._Q,self._T, self._rmodel.nq)
+        q_terminal = get_q_iter_from_Q(self._Q, self._T, self._rmodel.nq)
         pin.computeJointJacobians(self._rmodel, self._rdata, q_terminal)
-        J = pin.getFrameJacobian(self._rmodel, self._rdata, self._EndeffID, pin.LOCAL_WORLD_ALIGNED)
-        self._derivative_terminal_residual = self._weight_term_pos  * J[:3]
+        J = pin.getFrameJacobian(
+            self._rmodel, self._rdata, self._EndeffID, pin.LOCAL_WORLD_ALIGNED
+        )
+        self._derivative_terminal_residual = self._weight_term_pos * J[:3]
 
         # Putting them all together
-        T,nq = self._T,self._rmodel.nq
-        
-        self._derivative_residual = np.zeros([ (self._T+1)*self._rmodel.nq+3,(self._T+1)*self._rmodel.nq ])
-        
+        T, nq = self._T, self._rmodel.nq
+
+        self._derivative_residual = np.zeros(
+            [(self._T + 1) * self._rmodel.nq + 3, (self._T + 1) * self._rmodel.nq]
+        )
+
         # Computing the initial residuals
-        self._derivative_residual[:self._rmodel.nq,:self._rmodel.nq] = self._derivative_initial_residual
+        self._derivative_residual[
+            : self._rmodel.nq, : self._rmodel.nq
+        ] = self._derivative_initial_residual
 
         # Computing the principal residuals
-        self._derivative_residual[self._rmodel.nq:-3,:] = self._derivative_principal_residual
+        self._derivative_residual[
+            self._rmodel.nq : -3, :
+        ] = self._derivative_principal_residual
 
-        # Computing the terminal residuals 
-        self._derivative_residual[-3:,-self._rmodel.nq:] = self._derivative_terminal_residual
+        # Computing the terminal residuals
+        self._derivative_residual[
+            -3:, -self._rmodel.nq :
+        ] = self._derivative_terminal_residual
 
         self.gradval = self._derivative_residual.T @ self._residual
 
         return self.gradval
 
-    
-    def hess(self, Q : np.ndarray):
-        """Returns the hessian of the cost function with regards to the gauss newton approximation
-        """
+    def hess(self, Q: np.ndarray):
+        """Returns the hessian of the cost function with regards to the gauss newton approximation"""
         self._Q = Q
         self.cost(self._Q)
         self.grad(self._Q)
         self.hessval = self._derivative_residual.T @ self._derivative_residual
 
         return self.hessval
-    
-    
+
 
 if __name__ == "__main__":
-
-    # Setting up the environnement 
+    # Setting up the environnement
     robot_wrapper = RobotWrapper()
     robot, rmodel, gmodel = robot_wrapper(target=True)
     rdata = rmodel.createData()
@@ -221,21 +242,24 @@ if __name__ == "__main__":
     pin.updateGeometryPlacements(rmodel, rdata, gmodel, gdata, q)
 
     q0 = np.array([1, 1, 1, 1, 1, 1])
-    q1 = np.array([2.1, 2.1 ,2.1 ,2.1,2.1,2.1])
-    q2 = np.array([3.3, 3.3 ,3.3 ,3.3,3.3,3.3])
-    q3 = np.array([4,4,4,4,4,4])
+    q1 = np.array([2.1, 2.1, 2.1, 2.1, 2.1, 2.1])
+    q2 = np.array([3.3, 3.3, 3.3, 3.3, 3.3, 3.3])
+    q3 = np.array([4, 4, 4, 4, 4, 4])
 
     Q = np.concatenate((q0, q1, q2, q3))
-    T = int((len(Q) - 1) / rmodel.nq) 
-    p = np.array([.1,.2,.3])
-    
-    QP = QuadratricProblemNLP(robot, rmodel,
-                              q0 = q,
-                              target = p,
-                              T=T,
-                              weight_q0 = 5,
-                              weight_dq = .1,
-                              weight_term_pos = 10)
+    T = int((len(Q) - 1) / rmodel.nq)
+    p = np.array([0.1, 0.2, 0.3])
+
+    QP = QuadratricProblemNLP(
+        robot,
+        rmodel,
+        q0=q,
+        target=p,
+        T=T,
+        weight_q0=5,
+        weight_dq=0.1,
+        weight_term_pos=10,
+    )
 
     QP._Q = Q
 
@@ -244,4 +268,4 @@ if __name__ == "__main__":
     grad_numdiff = QP._grad_numdiff(Q)
     hessval_numdiff = QP._hess_numdiff(Q)
 
-    assert( np.linalg.norm(grad-grad_numdiff,np.inf) < 1e-4 )
+    assert np.linalg.norm(grad - grad_numdiff, np.inf) < 1e-4

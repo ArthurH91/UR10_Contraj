@@ -1,8 +1,9 @@
 import hppfcl
 import pinocchio as pin
-import numpy as np    
+import numpy as np
 import time
 import copy
+
 
 def get_transform(T_: hppfcl.Transform3f):
     T = np.eye(4)
@@ -16,18 +17,19 @@ def get_transform(T_: hppfcl.Transform3f):
         raise NotADirectoryError
     return T
 
-def get_q_iter_from_Q(Q : np.ndarray, iter: int, nq: int):
+
+def get_q_iter_from_Q(Q: np.ndarray, iter: int, nq: int):
     """Returns the iter-th configuration vector q_iter in the Q array.
 
-        Args:
-            Q (np.ndarray): Optimization vector.
-            iter (int): Index of the q_iter desired.
-            nq (int): size of q_iter
+    Args:
+        Q (np.ndarray): Optimization vector.
+        iter (int): Index of the q_iter desired.
+        nq (int): size of q_iter
 
-        Returns:
-            q_iter (np.ndarray): Array of the configuration of the robot at the iter-th step.
-        """
-    q_iter = np.array((Q[nq * iter: nq * (iter+1)]))
+    Returns:
+        q_iter (np.ndarray): Array of the configuration of the robot at the iter-th step.
+    """
+    q_iter = np.array((Q[nq * iter : nq * (iter + 1)]))
     return q_iter
 
 
@@ -36,20 +38,21 @@ def get_difference_between_q_iter(Q: np.ndarray, iter: int, nq: int):
 
     Parameters
     ----------
-    Q : np.ndarray 
+    Q : np.ndarray
         Optimization vector.
     iter : int
         Index of the q_iter desired.
     nq : int
         Length of a configuration vector.
-    
+
     Returns:
         q_iter+1 - q_iter (np.ndarray): Difference of the arrays of the configuration of the robot at the iter-th and ither +1 -th steps.
 
     """
     return get_q_iter_from_Q(Q, iter + 1, nq) - get_q_iter_from_Q(Q, iter, nq)
 
-def display_last_traj(vis, Q: np.ndarray, q0: np.ndarray, T : int, dt = None):
+
+def display_last_traj(vis, Q: np.ndarray, q0: np.ndarray, T: int, dt=None):
     """Display the trajectory computed by the solver
 
     Parameters
@@ -63,7 +66,7 @@ def display_last_traj(vis, Q: np.ndarray, q0: np.ndarray, T : int, dt = None):
     nq : int
         size of q_iter
     """
-    for q_iter in [q0]+np.split(Q,T+1):
+    for q_iter in [q0] + np.split(Q, T + 1):
         vis.display(q_iter)
         if dt is None:
             input()
@@ -93,37 +96,38 @@ def numdiff(self, f, x, eps=1e-8):
     res = []
     for i in range(len(x)):
         xc[i] += eps
-        res.append(copy.copy(f(xc)-f0)/eps)
+        res.append(copy.copy(f(xc) - f0) / eps)
         xc[i] = x[i]
     return np.array(res).T
-   
 
-def generateReachableTarget(rmodel,rdata = None, frameName = 'endeff'):
-    '''
+
+def generateReachableTarget(rmodel, rdata=None, frameName="endeff"):
+    """
     Sample a random configuration, then returns the forward kinematics
     for this configuration rdata.oMf[frameId].
     If rdata is None, create it on the flight (warning emitted)
-    '''
+    """
     q_target = pin.randomConfiguration(rmodel)
 
     # Creation of a temporary model.Data, to have access to the forward kinematics.
     if rdata is None:
         rdata = rmodel.createData()
-        print('Warning: pin.Data create for a simple kinematic, please avoid' )
+        print("Warning: pin.Data create for a simple kinematic, please avoid")
 
     # Updating the model.Data with the framesForwardKinematics
     pin.framesForwardKinematics(rmodel, rdata, q_target)
 
     # Get and check Frame Id
     fid = rmodel.getFrameId(frameName)
-    assert(fid<len(rmodel.frames))
-    
+    assert fid < len(rmodel.frames)
+
     return rdata.oMf[fid].copy()
+
 
 if __name__ == "__main__":
     import example_robot_data as robex
-    robot = robex.load('ur10')
-    p = generateReachableTarget(robot.model,robot.data, 'tool0')
 
-    assert(np.all(np.isfinite(p.translation)))
-    
+    robot = robex.load("ur10")
+    p = generateReachableTarget(robot.model, robot.data, "tool0")
+
+    assert np.all(np.isfinite(p.translation))

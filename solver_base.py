@@ -26,8 +26,28 @@
 
 import numpy as np
 
+
 class SolverBase:
-    def __init__(self, f, grad, hess=None, callback = None, alpha=0.5, alpha_max=10, beta=0.8, max_iter=1e3, eps=1e-6, ls_type="backtracking", step_type="l2_steepest", cond="Armijo", armijo_const=1e-4, wolfe_curvature_const=0.8, lin_solver=np.linalg.solve, bool_plot_results=False, verbose = False):
+    def __init__(
+        self,
+        f,
+        grad,
+        hess=None,
+        callback=None,
+        alpha=0.5,
+        alpha_max=10,
+        beta=0.8,
+        max_iter=1e3,
+        eps=1e-6,
+        ls_type="backtracking",
+        step_type="l2_steepest",
+        cond="Armijo",
+        armijo_const=1e-4,
+        wolfe_curvature_const=0.8,
+        lin_solver=np.linalg.solve,
+        bool_plot_results=False,
+        verbose=False,
+    ):
         """Initialize solver object with the cost function and its gradient, along with numerical and categorical parameters.
 
         Args:
@@ -69,7 +89,6 @@ class SolverBase:
         self._bool_plot_results = bool_plot_results
         self._verbose = verbose
 
-
     def set_wolfe_conditions_constants(self):
         return None
 
@@ -110,7 +129,6 @@ class SolverBase:
 
         # Start
         while True:
-
             # Evaluate function
             self._fval_k = self._f(self._xval_k)
             # Evaluate gradient
@@ -165,7 +183,6 @@ class SolverBase:
             # Adding the current alpha value to the history
             self._alphak_history.append(self._alpha_k)
 
-
         # Print output message
         self._print_output()
 
@@ -201,10 +218,16 @@ class SolverBase:
         return self._norm_gradfval_k < self._eps
 
     def _print_header(self):
-        """Prints the header of the optimization textual output.
-        """
-        print("{:<7}".format("Iter.") + " | " + "{:^10}".format("f(x)") +
-              " | " + "{:^10}".format("||df(x)||") + " | " + "{:^10}".format("||d||"))
+        """Prints the header of the optimization textual output."""
+        print(
+            "{:<7}".format("Iter.")
+            + " | "
+            + "{:^10}".format("f(x)")
+            + " | "
+            + "{:^10}".format("||df(x)||")
+            + " | "
+            + "{:^10}".format("||d||")
+        )
 
     def _print_iteration(self):
         """Prints the information of a single iteration of the gradient descent algorithm.
@@ -215,8 +238,15 @@ class SolverBase:
             self._norm_gradfval_k (float): Gradient norm value at current iterate.
             self._alpha_k (float): Size of the step at current iterate.
         """
-        print(("%7d" % self._iter_cnter) + " | " + ("%.4e" % self._fval_k) + " | " +
-              ("%.4e" % self._norm_gradfval_k) + " | " + ("%.4e" % self._alpha_k))
+        print(
+            ("%7d" % self._iter_cnter)
+            + " | "
+            + ("%.4e" % self._fval_k)
+            + " | "
+            + ("%.4e" % self._norm_gradfval_k)
+            + " | "
+            + ("%.4e" % self._alpha_k)
+        )
 
     def _print_output(self):
         """Prints the final message of the search.
@@ -229,19 +259,23 @@ class SolverBase:
         # If the algorithm converged
         if self._convergence_condition():
             print()
-            print(self._step_type, "descent successfully converged in %d iterations." %
-                  self._iter_cnter)
+            print(
+                self._step_type,
+                "descent successfully converged in %d iterations." % self._iter_cnter,
+            )
             print("Optimal function value: %.4e." % self._fval_k)
             print("Optimality conditions : %.4e." % self._norm_gradfval_k)
 
         # If the algorithm exceeded the iterations
         if self._exceeded_maximum_iterations():
             print()
-            print(self._step_type,
-                "descent exceeded the maximum number (%d) of iterations." % self._max_iter)
+            print(
+                self._step_type,
+                "descent exceeded the maximum number (%d) of iterations."
+                % self._max_iter,
+            )
             print("Current function value: %.4e." % self._fval_k)
-            print("Current optimality conditions : %.4e." %
-                  self._norm_gradfval_k)
+            print("Current optimality conditions : %.4e." % self._norm_gradfval_k)
 
     def _compute_current_directional_derivative(self):
         """Computes the directional derivative at current iterate.
@@ -283,13 +317,15 @@ class SolverBase:
                 return self._lin_solver(self._hessval_k, -self._gradfval_k)
             except:
                 if self._verbose:
-                    print("Warning, the hessian matrix cannot be inversed. Pseudo inverse used here")
-                return - np.linalg.pinv(self._hessval_k) @ self._gradfval_k
+                    print(
+                        "Warning, the hessian matrix cannot be inversed. Pseudo inverse used here"
+                    )
+                return -np.linalg.pinv(self._hessval_k) @ self._gradfval_k
         if self._step_type == "bfgs":
             return self._compute_bfgs_step()
 
     def _armijo_condition_is_true(self, alpha, fval_alpha):
-        """Check whether the Armijo condition is respected for a given step size, and function value corresponding to the step size. 
+        """Check whether the Armijo condition is respected for a given step size, and function value corresponding to the step size.
         Args:
             alpha (float): Value of step-size for which to check the condition.
             fval_alpha (float): Value of function at the point given by the stepsize.
@@ -297,12 +333,14 @@ class SolverBase:
             self._f (function handle): Function handle of the minimization objective function.
             self._xval_k (np.ndarray): Value of the current iterate.
             self._search_dir_k (np.ndarray): The search direction at current iterate.
-            self._dir_deriv_k (float): The directional derivative of the function along current search direction.        
+            self._dir_deriv_k (float): The directional derivative of the function along current search direction.
         Returns
             bool: True if Armijo condition is respected.
         """
         # Return truth value of Armijo condition
-        return fval_alpha <= self._fval_k + self._armijo_const * alpha * self._dir_deriv_k
+        return (
+            fval_alpha <= self._fval_k + self._armijo_const * alpha * self._dir_deriv_k
+        )
 
     def _compute_stepsize(self):
         """Chooses the stepsize of the line search.
@@ -338,7 +376,7 @@ class SolverBase:
             alpha = self._beta * alpha
         # Return
         return alpha
-    
+
     def _compute_next_step(self):
         """Computes the next step of the iterations.
 
@@ -353,39 +391,34 @@ class SolverBase:
         return new_q
 
     def _plot_results(self):
-        """Plotting the outputs, which are the values of the cost function, the gradient, the alphas and the regularization term through the iterations
-        """
-        try: 
+        """Plotting the outputs, which are the values of the cost function, the gradient, the alphas and the regularization term through the iterations"""
+        try:
             import matplotlib.pyplot as plt
+
             plt.subplot(311)
-            plt.plot(self._fval_history, "-ob",
-                     label=f"{self._step_type} method")
+            plt.plot(self._fval_history, "-ob", label=f"{self._step_type} method")
             plt.yscale("log")
             plt.ylabel("Cost")
             plt.legend()
 
             plt.subplot(312)
-            plt.plot(self._gradfval_history, "-ob",
-                     label=f"{self._step_type} method")
+            plt.plot(self._gradfval_history, "-ob", label=f"{self._step_type} method")
             plt.yscale("log")
             plt.ylabel("Gradient")
             plt.legend()
 
             plt.subplot(313)
-            plt.plot(self._alphak_history,  "-ob",
-                     label=f"{self._step_type} method")
+            plt.plot(self._alphak_history, "-ob", label=f"{self._step_type} method")
             plt.yscale("log")
             plt.ylabel("Alpha")
             plt.legend()
             plt.xlabel("Iterations")
 
-            plt.suptitle(
-                f"{self._step_type} method")
+            plt.suptitle(f"{self._step_type} method")
             plt.show()
         except:
-            print("No module named matplotlib.pyplot") 
-    
+            print("No module named matplotlib.pyplot")
+
 
 if __name__ == "__main__":
-
     X = []
