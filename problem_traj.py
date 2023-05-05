@@ -134,88 +134,11 @@ class QuadratricProblemNLP():
         self._initial_cost = 0.5 * sum(self._initial_residual ** 2)
         self._principal_cost = 0.5 * sum(self._principal_residual ** 2)
         self._terminal_cost = 0.5 * sum(self._terminal_residual ** 2)
-        self._cost = self._initial_cost + self._terminal_cost + self._principal_cost
+        self.costval = self._initial_cost + self._terminal_cost + self._principal_cost
 
-        return self._cost
+        return self.costval
 
-    
-    def _compute_derivative_initial_residuals(self):
-        """
-        Computes the derivatives of the initial residuals that are in a matrix, 
-        which is Eye*weight_q0
-
-        Returns
-        -------
-        J = Eye*weight_q0
-        """
-
-        return np.diag([self._weight_q0]*self._rmodel.nq)
-    
-    def _compute_derivative_principal_residuals(self):
-        """
-        Computes the derivatives of the principal  residuals that are in a matrix, 
-        as proved easily mathematically, this matrix is made out of :
-        - a matrix ((nq.(T+1) +3) x (nq.(T+1))) where the diagonal is filled with 1  
-        - a matrix ((nq.(T+1) +3) x (nq.(T+1))) where the diagonal under the diagonal 0 is filled with -1  
-
-        Returns
-        -------
-        _derivative_principal_residuals : np.ndarray
-            matrix describing the principal residuals derivatives
-        """
-
-        # Initially, the matrix was created from 2 np.eye (inducing 3 memory allocations
-        # _derivative_principal_residuals = (np.eye(self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T +1)) - np.eye(
-        #     self._rmodel.nq * (self._T+1) + 3, self._rmodel.nq * (self._T+1), k=-self._rmodel.nq))*(self._weight_dq)
-        nq,T = self._rmodel.nq,self._T
-        J = np.zeros((T*nq,(T+1)*nq))
-        np.fill_diagonal(J,-self._weight_dq)
-        np.fill_diagonal(J[:,nq:],self._weight_dq)
-
-        return J
-
-    def _compute_derivative_terminal_residuals(self):
-        """Computes the derivatives of the terminal residuals, which are for now the jacobian matrix from pinocchio.
-
-        Returns
-        -------
-        self._derivative_terminal_residuals : np.ndarray
-            matrix describing the terminal residuals derivativess
-        """
-        # Getting the q_terminal from Q 
-        q_terminal = get_q_iter_from_Q(self._Q,self._T, self._rmodel.nq)
-
-        # Computing the joint jacobian from pinocchio, used as the terminal residual derivative
-        ##_derivative_terminal_residuals = self._weight_term_pos  * pin.computeJointJacobian(self._rmodel, self._rdata, q_terminal, 6)[:3, :]
-        pin.computeJointJacobians(self._rmodel, self._rdata, q_terminal)
-        J = pin.getFrameJacobian(self._rmodel, self._rdata, self._EndeffID, pin.LOCAL_WORLD_ALIGNED)
-        _derivative_terminal_residuals = self._weight_term_pos  * J[:3]
-
-        return _derivative_terminal_residuals
-
-    def _compute_derivative_residuals(self):
-        """Computes the derivatives of the residuals
-
-        Returns
-        -------
-        derivative_residuals : np.ndarray
-            matrix describing the derivative of the residuals
-        """
-
-        T,nq = self._T,self._rmodel.nq
-        
-        self._derivative_residuals = np.zeros([ (T+1)*nq+3,(T+1)*nq ])
-        
-        # Computing the initial residuals
-        self._derivative_residuals[:nq,:nq] = self._compute_derivative_initial_residuals()
-
-        # Computing the principal residuals
-        self._derivative_residuals[nq:-3,:] = self._compute_derivative_principal_residuals()
-
-        # Computing the terminal residuals 
-        self._derivative_residuals[-3:,-nq:] = self._compute_derivative_terminal_residuals()
-
-    def grad(self, Q: np.ndarray):
+    def grad(self, Q:np.ndarray):
         """Returns the grad of the cost function.
 
         Parameters
@@ -228,20 +151,56 @@ class QuadratricProblemNLP():
         gradient : np.ndarray
             Array of shape (T*rmodel.nq + 3) in which the values of the gradient of the cost function are computed.
         """
-        self._Q = Q
-        self.cost(self._Q)
-        self._compute_derivative_residuals()
+        
+        ### COST AND RESIDUALS 
+        self.cost(Q)
 
-        self.gradval = self._derivative_residuals.T @ self._residual
+        ### DERIVATIVES OF THE RESIDUALS
+
+        # Computing the derivative of the initial residuals
+        self._derivative_initial_residual = np.diag([self._weight_q0]*self._rmodel.nq)
+
+        # Computing the derivative of the principal residual
+        nq,T = self._rmodel.nq,self._T
+        J = np.zeros((T*nq,(T+1)*nq))
+        np.fill_diagonal(J,-self._weight_dq)
+        np.fill_diagonal(J[:,nq:],self._weight_dq)
+
+        self._derivative_principal_residual = J
+
+        # Computing the derivative of the terminal residual
+        q_terminal = get_q_iter_from_Q(self._Q,self._T, self._rmodel.nq)
+        pin.computeJointJacobians(self._rmodel, self._rdata, q_terminal)
+        J = pin.getFrameJacobian(self._rmodel, self._rdata, self._EndeffID, pin.LOCAL_WORLD_ALIGNED)
+        self._derivative_terminal_residual = self._weight_term_pos  * J[:3]
+
+        # Putting them all together
+        T,nq = self._T,self._rmodel.nq
+        
+        self._derivative_residual = np.zeros([ (self._T+1)*self._rmodel.nq+3,(self._T+1)*self._rmodel.nq ])
+        
+        # Computing the initial residuals
+        self._derivative_residual[:self._rmodel.nq,:self._rmodel.nq] = self._derivative_initial_residual
+
+        # Computing the principal residuals
+        self._derivative_residual[self._rmodel.nq:-3,:] = self._derivative_principal_residual
+
+        # Computing the terminal residuals 
+        self._derivative_residual[-3:,-self._rmodel.nq:] = self._derivative_terminal_residual
+
+        self.gradval = self._derivative_residual.T @ self._residual
+
         return self.gradval
+
+    
 
     def hess(self, Q : np.ndarray):
         """Returns the hessian of the cost function.
         """
         self._Q = Q
         self.cost(self._Q)
-        self._compute_derivative_residuals()
-        self.hessval = self._derivative_residuals.T @ self._derivative_residuals
+        self.grad(self._Q)
+        self.hessval = self._derivative_residual.T @ self._derivative_residual
 
         return self.hessval
     
