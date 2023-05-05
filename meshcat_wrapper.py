@@ -98,7 +98,7 @@ class MeshcatWrapper():
         e_name : str
             name of the object displayed
         color : np.ndarray, optional
-            array describing the color of the target, by default np.array([1., 1., 1., 1.]) (ie red)
+            array describing the color of the target, by default np.array([1., 1., 1., 1.]) (ie white)
         """
         # Setting the object in the viewer
         self.viewer[e_name].set_object(g.Sphere(self._RADII_TARGET), self._meshcat_material(*color))

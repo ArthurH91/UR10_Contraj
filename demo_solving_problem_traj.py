@@ -36,6 +36,7 @@ from problem_traj import QuadratricProblemNLP
 from solver_newton_mt import SolverNewtonMt
 from dedicated_solver_casadi import CasadiSolver
 from generate_reachable_target import generateReachableTarget
+from utils import display_last_traj
 
 # ### HYPERPARMS
 T = 6
@@ -54,42 +55,10 @@ SEED = 573 # TRS does not perfectly converge, slight difference with IpOpt
 SEED = 1 # Perfect convergence to solution, immediate convergence of IpOpt (with WS)
 print(f'SEED = {SEED}' )
 
-WITH_DISPLAY = False
-WITH_PLOT = False
+WITH_DISPLAY = True
+WITH_PLOT = True
 WITH_NUMDIFF_SOLVE = False
 WARMSTART_IPOPT_WITH_TRS = False
-
-# ### HELPERS
-def get_q_iter_from_Q(Q : np.ndarray, iter: int, nq: int):
-    """Returns the iter-th configuration vector q_iter in the Q array.
-
-        Args:
-            Q (np.ndarray): Optimization vector.
-            iter (int): Index of the q_iter desired.
-            nq (int): size of q_iter
-
-        Returns:
-            q_iter (np.ndarray): Array of the configuration of the robot at the iter-th step.
-        """
-    q_iter = np.array((Q[nq * iter: nq * (iter+1)]))
-    return q_iter
-
-def display_last_traj(Q: np.ndarray, T : int, dt = None):
-    """Display the trajectory computed by the solver
-
-    Parameters
-    ----------
-    Q : np.ndarray
-        Optimization vector.
-    nq : int
-        size of q_iter
-    """
-    for q_iter in [robot.q0]+np.split(Q,T+1):
-        vis.display(q_iter)
-        if dt is None:
-            input()
-        else:
-            time.sleep(dt)
 
         
 if __name__ == "__main__":
@@ -130,22 +99,21 @@ if __name__ == "__main__":
 
     # Trust region solver
     trust_region_solver = SolverNewtonMt(
-        QP.compute_cost, QP.grad, QP.hess, max_iter=100, callback=None)
+        QP.cost, QP.grad, QP.hess, max_iter=100, callback=None)
 
-    
     trust_region_solver(Q0)
     list_fval_mt, list_gradfkval_mt, list_alphak_mt, list_reguk = trust_region_solver._fval_history, trust_region_solver._gradfval_history, trust_region_solver._alphak_history, trust_region_solver._reguk_history
     Q_trs = trust_region_solver._xval_k
-    residuals_trs = QP.compute_residuals(Q_trs)
+    # residuals_trs = QP.compute_residuals(Q_trs)
 
     if WITH_NUMDIFF_SOLVE:
         # # Scipy solver
-        mini = fmin_bfgs(QP.compute_cost, Q0, full_output = True)
+        mini = fmin_bfgs(QP.cost, Q0, full_output = True)
         Q_fmin = mini
 
         # Trust region solver with finite difference
         trust_region_solver_nd = SolverNewtonMt(
-            QP.compute_cost, QP._grad_numdiff, QP._hess_numdiff, max_iter=100, callback=None)
+            QP.cost, QP._grad_numdiff, QP._hess_numdiff, max_iter=100, callback=None)
         res = trust_region_solver_nd(Q0)
         list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = trust_region_solver_nd._fval_history, trust_region_solver_nd._gradfval_history, trust_region_solver_nd._alphak_history, trust_region_solver_nd._reguk_history
         Q_nd = trust_region_solver_nd._xval_k
@@ -169,10 +137,10 @@ if __name__ == "__main__":
 
     if WITH_DISPLAY:
         print("Press enter for displaying the trajectory of the newton's method from Marc Toussaint")
-        display_last_traj(Q_trs, T)
+        display_last_traj(vis, Q_trs, INITIAL_CONFIG,  T)
         if WITH_NUMDIFF_SOLVE:
             print("Now the trajectory of the same method but with the num diff")
-            display_last_traj(Q_nd, T)
+            display_last_traj(vis, Q_nd, INITIAL_CONFIG, T)
 
     if WITH_PLOT:
         plt.subplot(411)

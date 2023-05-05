@@ -28,6 +28,7 @@ import pinocchio as pin
 import copy
 
 from robot_wrapper import RobotWrapper
+from utils import get_q_iter_from_Q, get_difference_between_q_iter
 
 # This class is for defining the optimization problem and computing the cost function, its gradient and hessian.
 
@@ -77,63 +78,8 @@ class QuadratricProblemNLP():
         self._EndeffID = self._rmodel.getFrameId('endeff')
         assert (self._EndeffID < len(self._rmodel.frames))
 
-    def _distance_endeff_target(self, q: np.ndarray):
-        """Compute distance from a configuration q, from the end effector to the target. 
-        Here, the distance is calculated by the difference between the cartesian position of the end effector and the target.
 
-        Parameters
-        ----------
-        q : np.ndarray
-            Array of configuration of the robot, size rmodel.nq.
-
-        Returns
-        -------
-        residual : np.ndarray
-            Array of the distance at a configuration q, size 3. 
-        """
-
-        # Forward kinematics of the robot at the configuration q.
-        pin.framesForwardKinematics(self._rmodel, self._rdata, q)
-
-        # Obtaining the cartesian position of the end effector.
-        p = self._rdata.oMf[self._EndeffID].translation
-        return p - self._target
-    
-
-    
-    def compute_residuals(self, Q: np.ndarray):
-        """Compute the residuals of the cost function.
-        """
-
-        self._Q = Q
-
-        # Computing the initial residual (q0 - q_init)
-        self._initial_residual = self._get_q_iter_from_Q(0) - self._q0
-
-        # Penalizing the initial residual
-        self._initial_residual *= self._weight_q0
-
-        # Computing the principal residual 
-        self._principal_residual = self._get_difference_between_q_iter(0) * self._weight_dq
-        for iter in range(1,self._T):
-            self._principal_residual = np.concatenate( (self._principal_residual,
-                                                        self._get_difference_between_q_iter(iter) * self._weight_dq),
-                                                       axis=None)
-
-        # Computing the terminal residual
-
-        # Obtaining the last q from Q, mandatory to compute the terminal residual
-        q_T = self._get_q_iter_from_Q(self._T)
-
-        # Computing the residual 
-        self._terminal_residual = ( self._weight_term_pos ) * self._distance_endeff_target(q_T)
-
-        # Adding the terminal residual to the whole residual
-        self._residual = np.concatenate( (self._initial_residual,self._principal_residual, self._terminal_residual), axis = None)
-
-        return self._residual
-    
-    def compute_cost(self, Q: np.ndarray):
+    def cost(self, Q: np.ndarray):
         """Computes the cost of the QP.
 
         Parameters
@@ -148,38 +94,50 @@ class QuadratricProblemNLP():
         """
 
         self._Q = Q
-        res = self.compute_residuals(Q)
 
+        ### INITIAL RESIDUAL 
+        ### Computing the distance between q0 and q_init to make sure the robot starts at the right place
+        self._initial_residual = get_q_iter_from_Q(self._Q, 0, self._rmodel.nq) - self._q0
+
+        # Penalizing the initial residual
+        self._initial_residual *= self._weight_q0
+
+
+        ### RUNNING RESIDUAL 
+        ### Running residuals are computed by diffenciating between q_th and q_th +1
+        self._principal_residual = get_difference_between_q_iter(Q, 0, self._rmodel.nq) * self._weight_dq
+        for iter in range(1,self._T):
+            self._principal_residual = np.concatenate((self._principal_residual, get_difference_between_q_iter(Q, iter, self._rmodel.nq) * self._weight_dq),axis=None)
+
+
+        ### TERMINAL RESIDUAL 
+        ### Computing the distance between the last configuration and the target 
+
+        # Obtaining the last configuration of Q
+        q_last = get_q_iter_from_Q(self._Q, self._T, self._rmodel.nq)
+        
+        # Forward kinematics of the robot at the configuration q.
+        pin.framesForwardKinematics(self._rmodel, self._rdata, q_last)
+
+        # Obtaining the cartesian position of the end effector.
+        p_endeff = self._rdata.oMf[self._EndeffID].translation
+
+        # Comuting the distance between the target and the end effector
+        dist_endeff_target = p_endeff - self._target
+
+        self._terminal_residual = ( self._weight_term_pos ) * dist_endeff_target
+
+        ### TOTAL RESIDUAL
+        self._residual = np.concatenate( (self._initial_residual,self._principal_residual, self._terminal_residual), axis = None)
+
+        ### COMPUTING COSTS 
         self._initial_cost = 0.5 * sum(self._initial_residual ** 2)
         self._principal_cost = 0.5 * sum(self._principal_residual ** 2)
         self._terminal_cost = 0.5 * sum(self._terminal_residual ** 2)
         self._cost = self._initial_cost + self._terminal_cost + self._principal_cost
+
         return self._cost
 
-
-    def _get_q_iter_from_Q(self, iter: int):
-        """Returns the iter-th configuration vector q_iter in the Q array.
-
-        Args:
-            iter (int): Index of the q_iter desired.
-
-        Returns:
-            q_iter (np.ndarray): Array of the configuration of the robot at the iter-th step.
-        """
-        q_iter = np.array((self._Q[self._rmodel.nq * iter: self._rmodel.nq * (iter+1)]))
-        return q_iter
-    
-
-    def _get_difference_between_q_iter(self, iter: int):
-        """Returns the difference between the q_iter and q_iter+1 in the array self.Q
-
-        Parameters
-        ----------
-        iter : int
-            Index of the q_iter desired.
-
-        """
-        return self._get_q_iter_from_Q(iter + 1) - self._get_q_iter_from_Q(iter)
     
     def _compute_derivative_initial_residuals(self):
         """
@@ -225,7 +183,7 @@ class QuadratricProblemNLP():
             matrix describing the terminal residuals derivativess
         """
         # Getting the q_terminal from Q 
-        q_terminal = self._get_q_iter_from_Q(self._T)
+        q_terminal = get_q_iter_from_Q(self._Q,self._T, self._rmodel.nq)
 
         # Computing the joint jacobian from pinocchio, used as the terminal residual derivative
         ##_derivative_terminal_residuals = self._weight_term_pos  * pin.computeJointJacobian(self._rmodel, self._rdata, q_terminal, 6)[:3, :]
@@ -271,7 +229,7 @@ class QuadratricProblemNLP():
             Array of shape (T*rmodel.nq + 3) in which the values of the gradient of the cost function are computed.
         """
         self._Q = Q
-        _ = self.compute_residuals(Q)
+        self.cost(self._Q)
         self._compute_derivative_residuals()
 
         self.gradval = self._derivative_residuals.T @ self._residual
@@ -281,7 +239,7 @@ class QuadratricProblemNLP():
         """Returns the hessian of the cost function.
         """
         self._Q = Q
-        _ = self.compute_residuals(Q)
+        self.cost(self._Q)
         self._compute_derivative_residuals()
         self.hessval = self._derivative_residuals.T @ self._derivative_residuals
 
