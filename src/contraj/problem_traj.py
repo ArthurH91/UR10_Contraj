@@ -228,9 +228,12 @@ class QuadratricProblemNLP:
 
 
 if __name__ == "__main__":
+
+    from utils import numdiff
+
     # Setting up the environnement
     robot_wrapper = RobotWrapper()
-    robot, rmodel, gmodel = robot_wrapper(target=True)
+    robot, rmodel, gmodel = robot_wrapper()
     rdata = rmodel.createData()
     gdata = gmodel.createData()
 
@@ -263,9 +266,16 @@ if __name__ == "__main__":
 
     QP._Q = Q
 
+
+    def grad_numdiff(Q: np.ndarray):
+        return numdiff(QP.cost, Q)
+
+    def hess_numdiff(Q: np.ndarray):
+        return numdiff(grad_numdiff, Q)
+
     cost = QP.cost(Q)
     grad = QP.grad(Q)
-    grad_numdiff = QP._grad_numdiff(Q)
-    hessval_numdiff = QP._hess_numdiff(Q)
+    gradval_numdiff = grad_numdiff(Q)
+    hessval_numdiff = hess_numdiff(Q)
 
-    assert np.linalg.norm(grad - grad_numdiff, np.inf) < 1e-4
+    assert np.linalg.norm(grad - gradval_numdiff, np.inf) < 1e-4

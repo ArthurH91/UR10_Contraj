@@ -108,7 +108,7 @@ class RobotWrapper:
 
 if __name__ == "__main__":
     from wrapper_meshcat import MeshcatWrapper
-    from utils import generateReachableTarget
+    from utils import generate_reachable_target
 
     # Generating the robot
     robot_wrapper = RobotWrapper()
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     rdata = rmodel.createData()
 
     # Generate a reachable target
-    p = generateReachableTarget(rmodel, rdata, "tool0")
+    p = generate_reachable_target(rmodel, rdata, "tool0")
 
     # Generating the meshcat visualizer
     MeshcatVis = MeshcatWrapper()
