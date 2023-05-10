@@ -29,6 +29,7 @@ import pinocchio as pin
 import time
 from scipy.optimize import fmin, fmin_bfgs
 import matplotlib.pyplot as plt
+import hppfcl
 
 from wrapper_robot import RobotWrapper
 from wrapper_meshcat import MeshcatWrapper
@@ -57,8 +58,8 @@ print(f"SEED = {SEED}")
 WITH_DISPLAY = True
 WITH_PLOT = True
 WITH_NUMDIFF_SOLVE = True
-WARMSTART_IPOPT_WITH_TRS = True
-WITH_CASADI = True
+WARMSTART_IPOPT_WITH_TRS = False
+WITH_CASADI = False
 
 
 ### HELPERS (Finite difference comutation of the gradient and the hessian)
@@ -86,12 +87,16 @@ if __name__ == "__main__":
     if TARGET == "random":
         TARGET = generate_reachable_target(rmodel, rdata)
 
+    TARGET_SHAPE = hppfcl.Sphere(5e-2)
+
     # Creating the QP
     QP = QuadratricProblemNLP(
         robot,
         rmodel,
+        gmodel,
         q0=INITIAL_CONFIG,
-        target=TARGET.translation,
+        target=TARGET,
+        target_shape=TARGET_SHAPE,
         T=T,
         weight_q0=WEIGHT_Q0,
         weight_dq=WEIGHT_DQ,
@@ -110,7 +115,7 @@ if __name__ == "__main__":
 
     # Trust region solver
     trust_region_solver = SolverNewtonMt(
-        QP.cost, QP.grad, QP.hess, max_iter=100, callback=None
+        QP.cost, QP.grad, QP.hess, max_iter=100, callback=None, verbose = True
     )
 
     trust_region_solver(Q0)
@@ -130,7 +135,7 @@ if __name__ == "__main__":
 
         # Trust region solver with finite difference
         trust_region_solver_nd = SolverNewtonMt(
-            QP.cost, grad_numdiff, hess_numdiff, max_iter=100, callback=None
+            QP.cost, grad_numdiff, hess_numdiff, max_iter=100, callback=None, verbose = False
         )
         res = trust_region_solver_nd(Q0)
         list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = (

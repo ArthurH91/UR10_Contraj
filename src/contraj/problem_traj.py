@@ -27,8 +27,11 @@ import numpy as np
 import pinocchio as pin
 import copy
 
+import hppfcl
+import pydiffcol
+
 from wrapper_robot import RobotWrapper
-from utils import get_q_iter_from_Q, get_difference_between_q_iter
+from utils import get_q_iter_from_Q, get_difference_between_q_iter, numdiff
 
 # This class is for defining the optimization problem and computing the cost function, its gradient and hessian.
 
@@ -38,8 +41,10 @@ class QuadratricProblemNLP:
         self,
         robot,
         rmodel: pin.Model,
+        gmodel: pin.GeometryModel,
         q0: np.array,
         target: np.array,
+        target_shape: hppfcl.ShapeBase,
         T: int,
         weight_q0: float,
         weight_dq: float,
@@ -57,6 +62,8 @@ class QuadratricProblemNLP:
             Initial configuration of the robot
         target: np.array
             Target position for the end effector
+        target_shape: hppfcl.ShapeBase
+            hppfcl.ShapeBase of the target
         T : int
             Number of steps for the trajectory
         weight_q0 : float
@@ -68,11 +75,14 @@ class QuadratricProblemNLP:
         """
         self._robot = robot
         self._rmodel = rmodel
+        self._gmodel = gmodel
         self._rdata = rmodel.createData()
+        self._gdata = gmodel.createData()
 
         self._q0 = q0
         self._T = T
         self._target = target
+        self._target_shape = target_shape
         self._weight_q0 = weight_q0
         self._weight_dq = weight_dq
         self._weight_term_pos = weight_term_pos
@@ -80,6 +90,8 @@ class QuadratricProblemNLP:
         # Storing the IDs of the frame of the end effector
 
         self._EndeffID = self._rmodel.getFrameId("endeff")
+        self._EndeffID_geom = self._gmodel.getGeometryId("endeff_geom")
+        assert self._EndeffID_geom < len(self._gmodel.geometryObjects)
         assert self._EndeffID < len(self._rmodel.frames)
 
     def cost(self, Q: np.ndarray):
@@ -125,19 +137,36 @@ class QuadratricProblemNLP:
         ### TERMINAL RESIDUAL
         ### Computing the distance between the last configuration and the target
 
+        # Distance request for pydiffcol
+        self._req = pydiffcol.DistanceRequest()
+        self._res = pydiffcol.DistanceResult()
+
+        self._req.derivative_type = pydiffcol.DerivativeType.FirstOrderRS
+
         # Obtaining the last configuration of Q
         q_last = get_q_iter_from_Q(self._Q, self._T, self._rmodel.nq)
 
         # Forward kinematics of the robot at the configuration q.
         pin.framesForwardKinematics(self._rmodel, self._rdata, q_last)
+        pin.updateGeometryPlacements(
+            self._rmodel, self._rdata, self._gmodel, self._gdata, q_last
+        )
 
         # Obtaining the cartesian position of the end effector.
-        p_endeff = self._rdata.oMf[self._EndeffID].translation
+        self.endeff_Transform = self._rdata.oMf[self._EndeffID]
+        self.endeff_Shape = self._gmodel.geometryObjects[self._EndeffID_geom].geometry
 
-        # Comuting the distance between the target and the end effector
-        dist_endeff_target = p_endeff - self._target
+        #
+        dist_endeff_target = pydiffcol.distance(
+            self.endeff_Shape,
+            self.endeff_Transform,
+            self._target_shape,
+            self._target,
+            self._req,
+            self._res,
+        )
 
-        self._terminal_residual = (self._weight_term_pos) * dist_endeff_target
+        self._terminal_residual = (self._weight_term_pos) * self._res.w
 
         ### TOTAL RESIDUAL
         self._residual = np.concatenate(
@@ -184,11 +213,29 @@ class QuadratricProblemNLP:
         self._derivative_principal_residual = J
 
         # Computing the derivative of the terminal residual
+
         q_terminal = get_q_iter_from_Q(self._Q, self._T, self._rmodel.nq)
+
+        # Computing the jacobians in pinocchio
         pin.computeJointJacobians(self._rmodel, self._rdata, q_terminal)
-        J = pin.getFrameJacobian(
-            self._rmodel, self._rdata, self._EndeffID, pin.LOCAL_WORLD_ALIGNED
+
+        # Computing the derivatives of the distance
+        _ = pydiffcol.distance_derivatives(
+            self.endeff_Shape,
+            self.endeff_Transform,
+            self._target_shape,
+            self._target,
+            self._req,
+            self._res,
         )
+
+        # Getting the frame jacobian from the end effector in the LOCAL reference frame
+        jacobian = pin.computeFrameJacobian(
+            self._rmodel, self._rdata, q_terminal, self._EndeffID, pin.LOCAL
+        )
+
+        # The jacobian here is the multiplication of the jacobian of the end effector and the jacobian of the distance between the end effector and the target
+        J = jacobian[:3].T @ self._res.dw_dq1
         self._derivative_terminal_residual = self._weight_term_pos * J[:3]
 
         # Putting them all together
@@ -215,6 +262,8 @@ class QuadratricProblemNLP:
 
         self.gradval = self._derivative_residual.T @ self._residual
 
+        gradval_numdiff = self.grad_numdiff(Q)
+        assert np.linalg.norm(self.gradval - gradval_numdiff, np.inf) < 1e-4
         return self.gradval
 
     def hess(self, Q: np.ndarray):
@@ -226,9 +275,14 @@ class QuadratricProblemNLP:
 
         return self.hessval
 
+    def grad_numdiff(self, Q: np.ndarray):
+        return numdiff(self.cost, Q)
+
+    def hess_numdiff(self, Q: np.ndarray):
+        return numdiff(self.grad_numdiff, Q)
+
 
 if __name__ == "__main__":
-
     from utils import numdiff
 
     # Setting up the environnement
@@ -251,13 +305,18 @@ if __name__ == "__main__":
 
     Q = np.concatenate((q0, q1, q2, q3))
     T = int((len(Q) - 1) / rmodel.nq)
-    p = np.array([0.1, 0.2, 0.3])
+    p = pin.SE3.Random()
+
+    # The target shape is a ball of 5e-2 radii at the TARGET position
+    TARGET_SHAPE = hppfcl.Sphere(5e-2)
 
     QP = QuadratricProblemNLP(
         robot,
         rmodel,
+        gmodel,
         q0=q,
         target=p,
+        target_shape=TARGET_SHAPE,
         T=T,
         weight_q0=5,
         weight_dq=0.1,
@@ -265,7 +324,6 @@ if __name__ == "__main__":
     )
 
     QP._Q = Q
-
 
     def grad_numdiff(Q: np.ndarray):
         return numdiff(QP.cost, Q)
@@ -277,5 +335,5 @@ if __name__ == "__main__":
     grad = QP.grad(Q)
     gradval_numdiff = grad_numdiff(Q)
     hessval_numdiff = hess_numdiff(Q)
-
+    print(np.linalg.norm(grad - gradval_numdiff, np.inf))
     assert np.linalg.norm(grad - gradval_numdiff, np.inf) < 1e-4

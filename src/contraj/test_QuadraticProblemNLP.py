@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 import pinocchio as pin
+import hppfcl
 
 from problem_traj import QuadratricProblemNLP
 from wrapper_robot import RobotWrapper
@@ -29,17 +30,21 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         cls._Q_target = np.concatenate((cls._q_init, cls._q_inter, cls._q_target))
 
 
+        # The target shape is a ball of 5e-2 radii at the TARGET position
+        TARGET_SHAPE = hppfcl.Sphere(5e-2)
+
         # Configuring the computation of the QP
         WEIGHT_Q0 = 0.001
         WEIGHT_DQ = 0.001
         WEIGHT_TERM_POS = 4
         cls._T = 2
-        target = cls._p_target.translation
         cls._QP = QuadratricProblemNLP(
             cls._robot,
             cls._rmodel,
+            cls._gmodel,
             cls._q_init,
-            target,
+            cls._p_target,
+            TARGET_SHAPE,
             cls._T,
             WEIGHT_Q0,
             WEIGHT_DQ,
@@ -56,7 +61,6 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         self.assertAlmostEqual(
             np.linalg.norm(self._QP.gradval - grad_numdiff),
             0,
-            places=5,
             msg="The gradient is not the same as the finite difference one",
         )
 

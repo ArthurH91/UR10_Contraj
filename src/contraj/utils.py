@@ -101,7 +101,9 @@ def numdiff(f, x, eps=1e-8):
     return np.array(res).T
 
 
-def generate_reachable_target(rmodel, rdata=None, frameName="endeff", returnConfiguration = False):
+def generate_reachable_target(
+    rmodel, rdata=None, frameName="endeff", returnConfiguration=False
+):
     """
     Sample a random configuration, then returns the forward kinematics
     for this configuration rdata.oMf[frameId].

@@ -1,6 +1,11 @@
 import unittest
 import numpy as np
-from utils import get_q_iter_from_Q, get_transform, get_difference_between_q_iter, generate_reachable_target
+from utils import (
+    get_q_iter_from_Q,
+    get_transform,
+    get_difference_between_q_iter,
+    generate_reachable_target,
+)
 import pinocchio as pin
 
 
@@ -48,14 +53,16 @@ class TestUtils(unittest.TestCase):
         )
 
     def test_generate_reachable_target(self):
-        """Testing the function generate_reachable_target by making sure it returns a finite array.
-        """
+        """Testing the function generate_reachable_target by making sure it returns a finite array."""
         from wrapper_robot import RobotWrapper
+
         robot_wrapper = RobotWrapper()
         robot, rmodel, gmodel = robot_wrapper()
         rdata = rmodel.createData()
 
-        p, q = generate_reachable_target(rmodel, rdata, "tool0", returnConfiguration=True)
+        p, q = generate_reachable_target(
+            rmodel, rdata, "tool0", returnConfiguration=True
+        )
         pin.framesForwardKinematics(rmodel, rdata, q)
 
         p_endeff = rdata.oMf[-1].translation
@@ -63,6 +70,7 @@ class TestUtils(unittest.TestCase):
 
         self.assertTrue(np.all(np.isfinite(p.translation)))
         self.assertTrue(np.isclose(np.linalg.norm(dist_endeff_target), 0, atol=1e-5))
+
 
 if __name__ == "__main__":
     unittest.main()
