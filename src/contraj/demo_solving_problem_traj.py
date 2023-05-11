@@ -51,8 +51,8 @@ INITIAL_CONFIG = np.array([0, -2.5, 2, -1.2, -1.7, 0])
 INITIAL_CONFIG = "random"
 
 # SEED = abs(int(np.sin(time.time() % 6.28) * 1000))
-# # SEED = 573  # TRS does not perfectly converge, slight difference with IpOpt
-SEED = 1  # Perfect convergence to solution, immediate convergence of IpOpt (with WS)
+SEED = 573  # TRS does not perfectly converge, slight difference with IpOpt
+# SEED = 1  # Perfect convergence to solution, immediate convergence of IpOpt (with WS)
 print(f"SEED = {SEED}")
 
 WITH_DISPLAY = True
@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
         # Trust region solver with finite difference
         trust_region_solver_nd = SolverNewtonMt(
-            QP.cost, grad_numdiff, hess_numdiff, max_iter=100, callback=None, verbose = False
+            QP.cost, grad_numdiff, hess_numdiff, max_iter=100, callback=None, verbose = True
         )
         res = trust_region_solver_nd(Q0)
         list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = (
