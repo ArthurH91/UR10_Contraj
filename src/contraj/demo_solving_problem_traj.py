@@ -50,9 +50,11 @@ TARGET = "random"
 INITIAL_CONFIG = np.array([0, -2.5, 2, -1.2, -1.7, 0])
 INITIAL_CONFIG = "random"
 
+SEED = 335 # Nice convergence of the TRS, numdiff doesn't converge
+# SEED = 13 # Convergence of the TRS but not numdiff, ball is in the robot
 # SEED = abs(int(np.sin(time.time() % 6.28) * 1000))
-SEED = 573  # TRS does not perfectly converge, slight difference with IpOpt
-# SEED = 1  # Perfect convergence to solution, immediate convergence of IpOpt (with WS)
+# SEED = 7  # Convergence of the TRS, numdiff doesn't converge
+# SEED = 4  # Convergence of the numdiff and not the TRS
 print(f"SEED = {SEED}")
 
 WITH_DISPLAY = True
@@ -115,7 +117,7 @@ if __name__ == "__main__":
 
     # Trust region solver
     trust_region_solver = SolverNewtonMt(
-        QP.cost, QP.grad, QP.hess, max_iter=100, callback=None, verbose = True
+        QP.cost, QP.grad, QP.hess, max_iter=100, callback=None, verbose = True, eps = 1e-6
     )
 
     trust_region_solver(Q0)
@@ -135,7 +137,7 @@ if __name__ == "__main__":
 
         # Trust region solver with finite difference
         trust_region_solver_nd = SolverNewtonMt(
-            QP.cost, grad_numdiff, hess_numdiff, max_iter=100, callback=None, verbose = True
+            QP.cost, grad_numdiff, hess_numdiff, max_iter=100, callback=None, verbose = True, eps = 1e-6
         )
         res = trust_region_solver_nd(Q0)
         list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = (
