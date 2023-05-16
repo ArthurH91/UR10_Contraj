@@ -27,7 +27,8 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         )
         cls._q_init = pin.randomConfiguration(cls._rmodel)
         cls._q_inter = pin.randomConfiguration(cls._rmodel)
-        cls._Q_target = np.concatenate((cls._q_init, cls._q_inter, cls._q_target))
+        cls._q_term = pin.randomConfiguration(cls._rmodel)
+        cls._Q_target = np.concatenate((cls._q_init, cls._q_inter, cls._q_term))
 
 
         # The target shape is a ball of 5e-2 radii at the TARGET position
@@ -57,10 +58,11 @@ class TestQuadraticProblemNLP(unittest.TestCase):
         """Testing the gradient of the cost with the finite difference method"""
 
         grad_numdiff = numdiff(self._QP.cost, self._Q_target)
-        self._QP.grad(self._Q_target)
+        gradval = self._QP.grad(self._Q_target)
         self.assertAlmostEqual(
-            np.linalg.norm(self._QP.gradval - grad_numdiff),
+            np.linalg.norm(gradval - grad_numdiff),
             0,
+            places = 5,
             msg="The gradient is not the same as the finite difference one",
         )
 

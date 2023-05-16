@@ -82,6 +82,8 @@ class RobotWrapper:
         parent_joint = frame_tool0.parentJoint
         # Obtaining the placement of the frame tool0
         Mf_endeff = frame_tool0.placement
+        Mf_endeff.translation = Mf_endeff.translation + [1e-2, 1e-2, 0]
+
         # Creating the endeff frame
         endeff_frame = pin.Frame("endeff", parent_joint, Mf_endeff, pin.BODY)
         _ = self._rmodel.addFrame(endeff_frame, False)
@@ -94,7 +96,7 @@ class RobotWrapper:
         # Setting up the raddi of the cylinder
         endeff_radii, endeff_width = 1e-2, 1e-3
         # Creating a HPPFCL shape
-        endeff_shape = hppfcl.Cylinder(endeff_radii, endeff_width)
+        endeff_shape = hppfcl.Sphere(endeff_radii)
         # Creating a pin.GeometryObject for the model of the _robot
         geom_endeff = pin.GeometryObject(
             "endeff_geom", parent_joint, Mf_endeff, endeff_shape
