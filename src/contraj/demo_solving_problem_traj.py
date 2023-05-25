@@ -38,7 +38,7 @@ from solver_newton_mt import SolverNewtonMt
 from solver_casadi import CasadiSolver
 from utils import display_last_traj, generate_reachable_target, numdiff
 
-# ### HYPERPARMS
+#* ### HYPERPARMS
 T = 6
 WEIGHT_Q0 = 0.001
 WEIGHT_DQ = 0.001
@@ -58,12 +58,13 @@ print(f"SEED = {SEED}")
 
 WITH_DISPLAY = True
 WITH_PLOT = True
-WITH_NUMDIFF_SOLVE = True
+WITH_NUMDIFF_SOLVE = False
 WARMSTART_IPOPT_WITH_TRS = False
 WITH_CASADI = False
+WITH_PROXNLP = True
 
 
-### HELPERS (Finite difference comutation of the gradient and the hessian)
+### * HELPERS (Finite difference comutation of the gradient and the hessian)
 if WITH_NUMDIFF_SOLVE:
 
     def grad_numdiff(Q: np.ndarray):
@@ -147,7 +148,7 @@ if __name__ == "__main__":
         )
         Q_nd = trust_region_solver_nd._xval_k
 
-    # Casadi+IpOpt solver
+    # *Casadi+IpOpt solver
     if WITH_CASADI:
         casadiSolver = CasadiSolver(QP)
         Q_casadi, residuals_casadi = casadiSolver.solve(
@@ -155,7 +156,7 @@ if __name__ == "__main__":
         )
         J_casadi = casadiSolver.evalJacobian(Q_casadi)
 
-        # ### NUMDIFF unittest
+        # *### NUMDIFF unittest
         Qr = np.random.rand((T + 1) * rmodel.nq) * 6 - 3
         gnd = grad_numdiff(Qr)
         Jr = casadiSolver.evalJacobian(Qr)
