@@ -33,7 +33,7 @@ import pydiffcol
 from wrapper_robot import RobotWrapper
 from utils import get_q_iter_from_Q, get_difference_between_q_iter, numdiff
 
-# This class is for defining the optimization problem and computing the cost function, its gradient and hessian of the following QP problem : 
+# This class is for defining the optimization problem and computing the cost function, its gradient and hessian of the following QP problem :
 # Touching the ball while going from an initial position to another
 
 
@@ -44,11 +44,12 @@ class QuadratricProblemKeepingTContactWithBall:
         rmodel: pin.Model,
         gmodel: pin.GeometryModel,
         q0: np.array,
-        qinf : np.array,
+        end_pos: np.array,
         target: pin.SE3,
         target_shape: hppfcl.ShapeBase,
         T: int,
         weight_q0: float,
+        weight_endeffpos: float,
         weight_dq: float,
         weight_term_pos: float,
     ):
@@ -82,11 +83,12 @@ class QuadratricProblemKeepingTContactWithBall:
         self._gdata = gmodel.createData()
 
         self._q0 = q0
-        self._qinf = qinf
+        self._end_pos = end_pos
         self._T = T
         self._target = target
         self._target_shape = target_shape
         self._weight_q0 = weight_q0
+        self._weight_endeffpos = weight_endeffpos
         self._weight_dq = weight_dq
         self._weight_term_pos = weight_term_pos
 
@@ -113,22 +115,16 @@ class QuadratricProblemKeepingTContactWithBall:
             Sum of the costs
         """
 
-        self._Q = Q
-
-        ### INITIAL RESIDUAL
-        ### Computing the distance between q0 and q_init to make sure the robot starts at the right place
-        self._initial_residual = (
-            get_q_iter_from_Q(self._Q, 0, self._rmodel.nq) - self._q0
-        )
-        final_residual = get_q_iter_from_Q(self._Q, self._T, self._rmodel.nq) - self._qinf
-
-        self._initial_residual = np.concatenate((self._initial_residual, final_residual))
+        ###* INITIAL RESIDUAL
+        # Computing the distance between q0 and q_init to make sure the robot 
+        # starts at the right place
+        self._initial_residual = get_q_iter_from_Q(Q, 0, self._rmodel.nq) - self._q0
 
         # Penalizing the initial residual
         self._initial_residual *= self._weight_q0
 
-        ### RUNNING RESIDUAL
-        ### Running residuals are computed by diffenciating between q_th and q_th +1
+        ###* RUNNING RESIDUAL
+        # Running residuals are computed by diffenciating between q_th and q_th +1
         self._principal_residual = (
             get_difference_between_q_iter(Q, 0, self._rmodel.nq) * self._weight_dq
         )
@@ -142,8 +138,9 @@ class QuadratricProblemKeepingTContactWithBall:
                 axis=None,
             )
 
-        ### TERMINAL RESIDUALS
-        ### Computing the distance between the configurations and the target
+        ###* TOUCHING BALL RESIDUALS
+        # Computing the distance between the configurations and the target,
+        # in order to stay close to the ball
 
         # Distance request for pydiffcol
         self._req = pydiffcol.DistanceRequest()
@@ -151,13 +148,12 @@ class QuadratricProblemKeepingTContactWithBall:
 
         self._req.derivative_type = pydiffcol.DerivativeType.FirstOrderRS
 
-        # Creating a list of the terminal residuals : 
-        self._terminal_residual = np.zeros((3 * self._rmodel.nq))
+        # Creating a list of the terminal residuals :
+        self._ball_touching_residual = np.zeros((3 * self._rmodel.nq))
 
-        for k in range(self._T):
-
+        for k in range(self._T-1):
             # Obtaining the k configuration of Q
-            q_k = get_q_iter_from_Q(self._Q, k, self._rmodel.nq)
+            q_k = get_q_iter_from_Q(Q, k, self._rmodel.nq)
 
             # Forward kinematics of the robot at the configuration q_k.
             pin.framesForwardKinematics(self._rmodel, self._rdata, q_k)
@@ -167,8 +163,12 @@ class QuadratricProblemKeepingTContactWithBall:
 
             # Obtaining the cartesian position of the end effector.
             self.endeff_Transform = self._rdata.oMf[self._EndeffID]
-            self.endeff_Shape = self._gmodel.geometryObjects[self._EndeffID_geom].geometry
+            self.endeff_Shape = self._gmodel.geometryObjects[
+                self._EndeffID_geom
+            ].geometry
 
+            self._req = pydiffcol.DistanceRequest()
+            self._res = pydiffcol.DistanceResult()
             #
             dist_endeff_target = pydiffcol.distance(
                 self.endeff_Shape,
@@ -179,19 +179,49 @@ class QuadratricProblemKeepingTContactWithBall:
                 self._res,
             )
 
-            self._terminal_residual[k*3:(k+1) * 3 ] = ((self._weight_term_pos) * self._res.w)
+            self._ball_touching_residual[k * 3 : (k + 1) * 3] = (
+                self._weight_term_pos
+            ) * self._res.w
 
-        ### TOTAL RESIDUAL
+
+        ###* FINAL POSITION RESIDUAL
+        # Computing the distance between the final pose and the pose of the end effector 
+        # at the end of the trajectory.
+
+        q_final = (
+            get_q_iter_from_Q(Q, self._T, self._rmodel.nq)
+        )            
+        pin.framesForwardKinematics(self._rmodel, self._rdata, q_final)
+        pin.updateGeometryPlacements(
+                self._rmodel, self._rdata, self._gmodel, self._gdata, q_final
+            )
+        
+
+        self._final_position_residual = self._rdata.oMf[self._EndeffID].translation - self._end_pos.translation
+        self._final_position_residual *= self._weight_endeffpos
+
+        ###* TOTAL RESIDUAL
         self._residual = np.concatenate(
-            (self._initial_residual, self._principal_residual, self._terminal_residual),
+            (
+                self._initial_residual,
+                self._final_position_residual,
+                self._principal_residual,
+                self._ball_touching_residual,
+            ),
             axis=None,
         )
 
-        ### COMPUTING COSTS
+        ###* COMPUTING COSTS
         self._initial_cost = 0.5 * sum(self._initial_residual**2)
+        self._final_cost = 0.5 * sum(self._final_position_residual**2)
         self._principal_cost = 0.5 * sum(self._principal_residual**2)
-        self._terminal_cost = 0.5 * sum(self._terminal_residual**2)
-        self.costval = self._initial_cost + self._terminal_cost + self._principal_cost
+        self._ball_touching_cost = 0.5 * sum(self._ball_touching_residual**2)
+        self.costval = (
+            self._initial_cost
+            + self._final_cost
+            + self._ball_touching_cost
+            + self._principal_cost
+        )
 
         return self.costval
 
@@ -227,7 +257,7 @@ class QuadratricProblemKeepingTContactWithBall:
 
         # Computing the derivative of the terminal residual
 
-        q_terminal = get_q_iter_from_Q(self._Q, self._T, self._rmodel.nq)
+        q_terminal = get_q_iter_from_Q(Q, self._T, self._rmodel.nq)
 
         # Computing the jacobians in pinocchio
         pin.computeJointJacobians(self._rmodel, self._rdata, q_terminal)
@@ -247,7 +277,8 @@ class QuadratricProblemKeepingTContactWithBall:
             self._rmodel, self._rdata, q_terminal, self._EndeffID, pin.LOCAL
         )
 
-        # The jacobian here is the multiplication of the jacobian of the end effector and the jacobian of the distance between the end effector and the target
+        # The jacobian here is the multiplication of the jacobian of the end effector 
+        # and the jacobian of the distance between the end effector and the target
         J = jacobian.T @ self._res.dw_dq1.T
         self._derivative_terminal_residual = self._weight_term_pos * J.T
 
@@ -274,7 +305,7 @@ class QuadratricProblemKeepingTContactWithBall:
         ] = self._derivative_terminal_residual
 
         self.gradval = self._derivative_residual.T @ self._residual
-        
+
         gradval_numdiff = self.grad_numdiff(Q)
         # print(f"grad val : {np.linalg.norm(self.gradval)} \n grad val numdiff : {np.linalg.norm(gradval_numdiff)}")
         # assert np.linalg.norm(self.gradval - gradval_numdiff, np.inf) < 1e-4
@@ -282,9 +313,9 @@ class QuadratricProblemKeepingTContactWithBall:
 
     def hess(self, Q: np.ndarray):
         """Returns the hessian of the cost function with regards to the gauss newton approximation"""
-        self._Q = Q
-        self.cost(self._Q)
-        self.grad(self._Q)
+
+        self.cost(Q)
+        self.grad(Q)
         self.hessval = self._derivative_residual.T @ self._derivative_residual
 
         return self.hessval
@@ -334,6 +365,7 @@ if __name__ == "__main__":
         target_shape=TARGET_SHAPE,
         T=T,
         weight_q0=5,
+        weight_qinf=0.1,
         weight_dq=0.1,
         weight_term_pos=10,
     )
