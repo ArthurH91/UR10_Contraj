@@ -47,12 +47,13 @@ WEIGHT_QINF = 0.01
 WEIGHT_DQ = 0.001
 WEIGHT_TERM_POS = 6
 
-EPS = 1e-9
-MAX_ITER = 1
+EPS = 1e-7
+MAX_ITER = 50
 
 WITH_DISPLAY = True
 WITH_PLOT = True
-WITH_POS_CHECK = True  # Check the initial position and the final position of the robot
+WITH_POS_CHECK = False  # Check the initial position and the final position of the robot
+WITH_NUMDIFF = True
 
 
 ### * HELPERS (Finite difference comutation of the gradient and the hessian)
@@ -141,49 +142,77 @@ if __name__ == "__main__":
     # Initial trajectory
     Q0 = np.concatenate([INITIAL_CONFIG] * (T + 1))
 
-    # Trust region solver with finite difference
-    trust_region_solver_nd = SolverNewtonMt(
-        QP.cost,
-        grad_numdiff,
-        hess_numdiff,
-        max_iter=MAX_ITER,
-        callback=None,
-        verbose=True,
-        eps=EPS,
+    # Trust region solver
+
+    trust_region_solver = SolverNewtonMt(
+    QP.cost,
+    QP.grad,
+    QP.hess,
+    max_iter=MAX_ITER,
+    callback=None,
+    verbose=True,
+    eps=EPS,
     )
-    res = trust_region_solver_nd(Q0)
-    list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = (
-        trust_region_solver_nd._fval_history,
-        trust_region_solver_nd._gradfval_history,
-        trust_region_solver_nd._alphak_history,
-        trust_region_solver_nd._reguk_history,
+    res = trust_region_solver(Q0)
+    list_fval_mt, list_gradfkval_mt, list_alphak_mt, list_reguk = (
+        trust_region_solver._fval_history,
+        trust_region_solver._gradfval_history,
+        trust_region_solver._alphak_history,
+        trust_region_solver._reguk_history,
     )
-    Q_nd = trust_region_solver_nd._xval_k
+    Q = trust_region_solver._xval_k
+
+    if WITH_NUMDIFF:
+        # Trust region solver with finite difference
+        trust_region_solver_nd = SolverNewtonMt(
+            QP.cost,
+            QP.grad_numdiff,
+            QP.hess_numdiff,
+            max_iter=MAX_ITER,
+            callback=None,
+            verbose=True,
+            eps=EPS,
+        )
+        res = trust_region_solver_nd(Q0)
+        list_fval_mt_nd, list_gradfkval_mt_nd, list_alphak_mt_nd, list_reguk_nd = (
+            trust_region_solver_nd._fval_history,
+            trust_region_solver_nd._gradfval_history,
+            trust_region_solver_nd._alphak_history,
+            trust_region_solver_nd._reguk_history,
+        )
+        Q_nd = trust_region_solver_nd._xval_k
 
     if WITH_DISPLAY:
-        print("Now the trajectory of the same method but with the num diff")
-        display_last_traj(vis, Q_nd, INITIAL_CONFIG, T)
+        print("Trajectory with the TRS method")
+        display_last_traj(vis, Q, INITIAL_CONFIG, T)
+        if WITH_NUMDIFF:
+            print("Now the trajectory of the same method but with the num diff")
+            display_last_traj(vis, Q_nd, INITIAL_CONFIG, T)
 
     if WITH_PLOT:
         plt.subplot(411)
+        plt.plot(list_fval_mt, "-ob", label="TRS method")
         plt.plot(list_fval_mt_nd, "-or", label="Finite difference method")
         plt.yscale("log")
         plt.ylabel("Cost")
         plt.legend()
 
         plt.subplot(412)
+        plt.plot(list_fval_mt, "-ob", label="TRS method")
         plt.plot(list_gradfkval_mt_nd, "-or", label="Finite difference method")
         plt.yscale("log")
         plt.ylabel("Gradient")
         plt.legend()
 
         plt.subplot(413)
+        plt.plot(list_fval_mt, "-ob", label="TRS method")
         plt.plot(list_alphak_mt_nd, "-or", label="Finite difference method")
         plt.yscale("log")
         plt.ylabel("Alpha")
         plt.legend()
 
         plt.subplot(414)
+        plt.plot(list_fval_mt, "-ob", label="TRS method")
         plt.plot(list_reguk_nd, "-or", label="Finite difference method")
         plt.yscale("log")
         plt.ylabel("Regularization")

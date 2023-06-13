@@ -151,7 +151,7 @@ class QuadratricProblemKeepingTContactWithBall:
         # Creating a list of the terminal residuals :
         self._ball_touching_residual = np.zeros((3 * self._rmodel.nq))
 
-        for k in range(self._T-1):
+        for k in range(1,self._T-1):
             # Obtaining the k configuration of Q
             q_k = get_q_iter_from_Q(Q, k, self._rmodel.nq)
 
@@ -204,9 +204,9 @@ class QuadratricProblemKeepingTContactWithBall:
         self._residual = np.concatenate(
             (
                 self._initial_residual,
-                self._final_position_residual,
                 self._principal_residual,
                 self._ball_touching_residual,
+                self._final_position_residual,
             ),
             axis=None,
         )
@@ -241,74 +241,84 @@ class QuadratricProblemKeepingTContactWithBall:
 
         ### COST AND RESIDUALS
         self.cost(Q)
+        nq, T = self._rmodel.nq, self._T
 
         ### DERIVATIVES OF THE RESIDUALS
 
         # Computing the derivative of the initial residuals
-        self._derivative_initial_residual = np.diag([self._weight_q0] * self._rmodel.nq)
+        self._derivative_initial_residual = np.diag([self._weight_q0] * nq)
 
         # Computing the derivative of the principal residual
-        nq, T = self._rmodel.nq, self._T
         J_principal = np.zeros((T * nq, (T + 1) * nq))
         np.fill_diagonal(J_principal, -self._weight_dq)
         np.fill_diagonal(J_principal[:, nq:], self._weight_dq)
 
         self._derivative_principal_residual = J_principal
 
-        # Computing the derivative of the terminal residual
+        self._derivative_touching_residual = np.zeros(((T+1)*3, (T+1)*nq ))
+        # Computing the derivative of the ball touching residual
+        for i in range(1,T):
+            q_i = get_q_iter_from_Q(Q, i, nq)
 
-        q_terminal = get_q_iter_from_Q(Q, self._T, self._rmodel.nq)
+            # Computing the jacobians in pinocchio
+            pin.computeJointJacobians(self._rmodel, self._rdata, q_i)
 
-        # Computing the jacobians in pinocchio
-        pin.computeJointJacobians(self._rmodel, self._rdata, q_terminal)
+            # Computing the derivatives of the distance
+            _ = pydiffcol.distance_derivatives(
+                self.endeff_Shape,
+                self.endeff_Transform,
+                self._target_shape,
+                self._target,
+                self._req,
+                self._res,
+            )
 
-        # Computing the derivatives of the distance
-        _ = pydiffcol.distance_derivatives(
-            self.endeff_Shape,
-            self.endeff_Transform,
-            self._target_shape,
-            self._target,
-            self._req,
-            self._res,
-        )
+            # Getting the frame jacobian from the end effector in the LOCAL reference frame
+            jacobian = pin.computeFrameJacobian(
+                self._rmodel, self._rdata, q_i, self._EndeffID, pin.LOCAL
+            )
 
-        # Getting the frame jacobian from the end effector in the LOCAL reference frame
-        jacobian = pin.computeFrameJacobian(
-            self._rmodel, self._rdata, q_terminal, self._EndeffID, pin.LOCAL
-        )
+            # The jacobian here is the multiplication of the jacobian of the end effector 
+            # and the jacobian of the distance between the end effector and the target
+            J = jacobian.T @ self._res.dw_dq1.T
+            self._derivative_terminal_residual = self._weight_term_pos * J.T
 
-        # The jacobian here is the multiplication of the jacobian of the end effector 
-        # and the jacobian of the distance between the end effector and the target
-        J = jacobian.T @ self._res.dw_dq1.T
-        self._derivative_terminal_residual = self._weight_term_pos * J.T
+            self._derivative_touching_residual[3*i:3*(i+1),:]
+        
+        self._derivative_final_residual = pin.getFrameJacobian(
+            self._rmodel, self._rdata, self._EndeffID, pin.LOCAL_WORLD_ALIGNED)[:3]
+        
 
         # Putting them all together
-        T, nq = self._T, self._rmodel.nq
 
-        self._derivative_residual = np.zeros(
-            [(self._T + 1) * self._rmodel.nq + 3, (self._T + 1) * self._rmodel.nq]
+        self._derivative_initial_principal_residual = np.zeros(
+            [(T + 1) * nq , (T+1) * nq]
         )
 
         # Computing the initial residuals
-        self._derivative_residual[
-            : self._rmodel.nq, : self._rmodel.nq
+        self._derivative_initial_principal_residual[
+            : nq, : nq
         ] = self._derivative_initial_residual
 
         # Computing the principal residuals
-        self._derivative_residual[
-            self._rmodel.nq : -3, :
+        self._derivative_initial_principal_residual[
+            nq:
         ] = self._derivative_principal_residual
 
-        # Computing the terminal residuals
-        self._derivative_residual[
-            -3:, -self._rmodel.nq :
-        ] = self._derivative_terminal_residual
+        self._derivative_residual =  np.zeros(
+            [(T + 1) * (nq + 3), (T+1) * nq])
+        
+        self._derivative_residual[:(T+1)*nq,:] = self._derivative_initial_principal_residual
+
+        self._derivative_residual[(T+1)*nq:(T+1)*(3+nq)+1,:] = self._derivative_touching_residual
+        self._derivative_residual[-3:, -self._rmodel.nq:] =  self._derivative_final_residual
+
 
         self.gradval = self._derivative_residual.T @ self._residual
 
-        gradval_numdiff = self.grad_numdiff(Q)
-        # print(f"grad val : {np.linalg.norm(self.gradval)} \n grad val numdiff : {np.linalg.norm(gradval_numdiff)}")
-        # assert np.linalg.norm(self.gradval - gradval_numdiff, np.inf) < 1e-4
+        gradval_numdiff = self.grad_numdiff(Q) 
+        print(f"grad val : {np.linalg.norm(self.gradval)} \n grad val numdiff : {np.linalg.norm(gradval_numdiff)}")
+        assert np.linalg.norm(self.gradval - gradval_numdiff, np.inf) < 1e-5
         return self.gradval
 
     def hess(self, Q: np.ndarray):
